@@ -1,3 +1,2 @@
 pyodbc
-pywin32
 openpyxl
