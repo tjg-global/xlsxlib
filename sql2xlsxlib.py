@@ -10,6 +10,7 @@ class x_sql2xlsxlib(Exception): pass
 
 
 def get_dialect(db):
+    print("db", db)
     dialects = {"Snowflake": "Snowflake", "sqlite3": "sqlite", "SQLSVR32.DLL": "SQL_server"}
     try:
         db_dir = str(db.__dir__)
@@ -38,7 +39,7 @@ def rows(cursor, arraysize=-1):
             break
 
 
-def query2xlsx(db, query, spreadsheet_filepath, dialect_name=None):
+def query2xlsx(db, query, spreadsheet_filepath, driver=None):
     """query2xl - Convert the output from a query to a spreadsheet
     Parameters:
         db - open MSSQL database connection
@@ -68,11 +69,18 @@ def query2xlsx(db, query, spreadsheet_filepath, dialect_name=None):
     for info in xlsxlib.xlsx(snowflake_db.cursor_data(query), spreadsheet_filepath):
         yield info
     '''
-    if not dialect_name:
+    if driver:
+        try:
+            dialects = {"snowflake": "Snowflake", "mssql": "SQL_server"}
+            db_dialect = getattr(dialect, dialects[driver])
+        except KeyError:
+            raise RuntimeError("Could not determine dialect")
+    else:
         try:
             db_dialect = getattr(dialect, get_dialect(db))
-        except TypeError:
+        except (TypeError, AttributeError):
             raise RuntimeError("Could not determine dialect")
+
 
     db_obj = db_dialect(db)
     db_obj.pre_query()

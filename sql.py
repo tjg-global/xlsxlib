@@ -4,18 +4,20 @@ import logging
 import re
 import urllib.parse as urlparse
 
-import pyodbc
+#import pyodbc
 
-Connection = pyodbc.Connection
+#Connection = pyodbc.Connection
 try:
     import snowflake.connector as snowflake
 except ImportError:
     snowflake = None
 
+'''
 import win32api
 import win32con
 import win32net
 import win32netcon
+'''
 
 import row
 
@@ -65,7 +67,7 @@ def snowflake_connection(database="warehouses", username=None, password=None):
         account="global.eu-west-1",
         database=database,
         warehouse="team_technology",
-        role="sr_engineer",
+        role="reader_all",
     )
 
 
@@ -84,14 +86,18 @@ def database(database_name):
     return db
 
 
+
 def database_ex(database_name):
     driver, server, database, username, password = parse_dburi_ex(database_name)
     if driver == "mssql":
-        return Database("mssql", pyodbc_connection(server, database, username, password))
+        return Database("mssql", pyodbc_connection(server, database, username, password)), driver
+        pass
     elif driver == "mysql":
-        return Database("mysql", mysql_connection(server, database, username, password))
+        return Database("mysql", mysql_connection(server, database, username, password)), driver
+        pass
     elif driver == "snowflake":
-        return Database("snowflake", snowflake_connection(database, username, password))
+        return Database("snowflake", snowflake_connection(database, username, password)), driver
+
     else:
         raise RuntimeError("Unknown driver: %s" % driver)
 

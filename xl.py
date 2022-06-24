@@ -72,7 +72,7 @@ def main(script_filepath, database=None, xls_filepath=None, *params):
     logging.info("Writing to %s ...", xls_filepath)
     if os.path.isfile(xls_filepath):
         os.remove(xls_filepath)
-    db = sql.database_ex(database)
+    db, driver = sql.database_ex(database)
     if driver == "mssql":
         with db.cursor() as q:
             q.execute("SET ANSI_WARNINGS ON\nSET ANSI_NULLS ON\n")
@@ -81,7 +81,7 @@ def main(script_filepath, database=None, xls_filepath=None, *params):
         except AttributeError:
             pass
     for info in sql2xlsxlib.query2xlsx(
-        db=db, query=query, spreadsheet_filepath=xls_filepath
+        db=db, query=query, spreadsheet_filepath=xls_filepath, driver=driver
     ):
         logging.info(info)
 
