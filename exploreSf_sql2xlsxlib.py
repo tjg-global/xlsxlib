@@ -17,12 +17,12 @@ sf_db = snowflake.connector.connect(
 sf_db.cursor().execute('USE ROLE DEV_ENGINEER;')
 
 test_query = '''SELECT 'Hello3';
-SELECT * FROM "DAVIDE_MASINI"."SANDBOX"."ACCOUNTS" LIMIT 100;
+SELECT * FROM "DAVIDE_MASINI"."SANDBOX"."ACCOUNTS" LIMIT 200;
 SELECT 'Hello4';
   
-SELECT * FROM "DAVIDE_MASINI"."SANDBOX"."ACCOUNTS" LIMIT 100;
+SELECT * FROM "DAVIDE_MASINI"."SANDBOX"."ACCOUNTS" LIMIT 200;
      '''
 
-for i in sql2xlsxlib.query2xlsx(sf_db, test_query, 'test.xlsx'):
+for i in sql2xlsxlib.query2xlsx(sf_db, test_query, '/Users/Davide.Masini/test.xlsx'):
     pass
 

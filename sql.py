@@ -66,7 +66,7 @@ def snowflake_connection(database="warehouses", username=None, password=None):
         password=password or os.environ["DBT_PROFILES_PASSWORD"],
         account="global.eu-west-1",
         database=database,
-        warehouse="team_technology",
+        warehouse="DEV_DWH_ETL_XSMALL",
         role="reader_all",
     )
 
