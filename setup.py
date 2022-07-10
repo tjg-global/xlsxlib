@@ -3,7 +3,7 @@ import glob
 import setuptools
 
 setuptools.setup(
-    name='python-site-packages',
+    name='xlsxlib',
     version='1.1',
     description='SQL to Excel',
     author='Tim Golden',
