@@ -8,5 +8,6 @@ setuptools.setup(
     description='SQL to Excel',
     author='Tim Golden',
     author_email='tim.golden@global.com',
-    modules = ["sql2xlsxlib.py", "xlsxlib.py"]
+    install_requires = ['openpyxl'],
+    py_modules = ["sql2xlsxlib", "xlsxlib"]
 )
