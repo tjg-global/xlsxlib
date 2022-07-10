@@ -4,9 +4,9 @@ import setuptools
 
 setuptools.setup(
     name='xlsxlib',
-    version='1.1',
+    version='1.1.2',
     description='SQL to Excel',
     author='Tim Golden',
     author_email='tim.golden@global.com',
-    modules = [os.path.basename(f) for f in glob.glob("*.py")]
+    modules = ["sql2xlsxlib.py", "xlsxlib.py"]
 )
