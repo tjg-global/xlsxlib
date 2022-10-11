@@ -24,12 +24,16 @@ def mysql(server, database, username, password, **kwargs):
     )
 
 if snow:
-    def snowflake(server="global.eu-west-1", database="warehouses", username=None, password=None, role="reader_all", warehouse="training"):
+    SNOWFLAKE_SERVER = "global.eu-west-1"
+    SNOWFLAKE_DATABASE = "warehouses"
+    SNOWFLAKE_ROLE = "reader_all"
+    SNOWFLAKE_WAREHOUSE = "training"
+    def snowflake(server=SNOWFLAKE_SERVER, database=SNOWFLAKE_WAREHOUSE, username=None, password=None, role=SNOWFLAKE_ROLE, warehouse=SNOWFLAKE_WAREHOUSE):
         return snow.connect(
             user=username or os.environ["DBT_PROFILES_USER"],
             password=password or os.environ["DBT_PROFILES_PASSWORD"],
-            account=server,
-            database=database,
-            warehouse=warehouse,
-            role=role
+            account=server or SNOWFLAKE_SERVER,
+            database=database or SNOWFLAKE_DATABASE,
+            warehouse=warehouse or SNOWFLAKE_WAREHOUSE,
+            role=role or SNOWFLAKE_ROLE
         )

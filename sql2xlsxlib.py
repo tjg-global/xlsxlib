@@ -1,11 +1,8 @@
 import os, sys
 import re
 
-import xlsxlib
-import dialects
-
-#import pyodbc
-
+from . import xlsxlib
+from . import dialects
 
 class x_sql2xlsxlib(Exception): pass
 
@@ -47,11 +44,6 @@ def query2xlsx(db, query, spreadsheet_filepath, driver=None):
         will be used as the header row of the spreadsheet and highlighted in bold.
         The whole spreadsheet will be have its column widths autofitted.
     """
-
-    #
-    # Get rid of any "GO" batch markers, typical in mssql
-    #
-    query = re.sub(r"\bGO\b", r"", query)
 
     '''
     if True:#Later to change to SQL server
