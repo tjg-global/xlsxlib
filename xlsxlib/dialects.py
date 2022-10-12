@@ -80,14 +80,14 @@ class Snowflake(Database):
         more_data = True
 
         while more_data:
-            while more_data and not cursor.description:
+            while more_data and not cursor.rowcount:
                 more_data = self.nextset(query_iter, cursor)
 
             if more_data:
                 sheet_name = cursor.fetchone()[0]
                 more_data = self.nextset(query_iter, cursor)
 
-            while more_data and not cursor.description:
+            while more_data and not cursor.rowcount:
                 more_data = self.nextset(query_iter, cursor)
 
             if more_data:
