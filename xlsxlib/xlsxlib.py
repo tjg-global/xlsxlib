@@ -38,6 +38,7 @@ def xlsx(data_iterator, spreadsheet_filepath):
             sheet_name = mangle_sheet_name(sheet_name)
         else:
             sheet_name = u"Sheet %d" % n_sheet
+        print("Sheet name: %s" % sheet_name)
         ws = wb.create_sheet(title=sheet_name)
         ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
         ws.page_setup.paperSize = ws.PAPERSIZE_A4
@@ -48,14 +49,14 @@ def xlsx(data_iterator, spreadsheet_filepath):
         # Write a single row containing the headers
         # Make the headers bold and freeze panes below that row
         #
-        header_names = [name for name, type in headers]        
+        header_names = [name for name, type in headers]
 
         ws.append(header_names)
         ws.freeze_panes = "A2"
 
         bold = Font(bold=True)
         for cell in ws["1:1"]:
-            cell.font = cell.font = bold    
+            cell.font = cell.font = bold
         yield "%s headers..." % sheet_name
 
         #
@@ -69,16 +70,16 @@ def xlsx(data_iterator, spreadsheet_filepath):
         yield "%s %d rows" % (sheet_name, n_row)
 
         #
-        # Get the max characters in each column. Then set the width to 
+        # Get the max characters in each column. Then set the width to
         # that. Width is exactly the width of a monospace font (if not
-        # changing other styles at least). Even if you use a variable width 
+        # changing other styles at least). Even if you use a variable width
         # font it is a decent estimation. This will not work with formulas.
         #
         for col in ws.columns:
             max_length = 0
             column = col[0].column_letter # Get the column name
             max_length = max(len(str(cell.value)) for cell in col)
-            adjusted_width = (max_length + 2) * 1.1
+            adjusted_width = (max_length + 2) * 1.2
             ws.column_dimensions[column].width = adjusted_width
 
 

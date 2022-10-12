@@ -33,7 +33,7 @@ def parse_dburi_ex(dburi):
     )
 
 
-def munge_script_for_mssql(query):
+def munge_script_for_mssql(query, params):
     query = re.sub(r"USE\s+.*", "", query)
     query = re.sub(r"\bGO\b", "", query)
 
@@ -82,7 +82,7 @@ def main(script_filepath, database=None, xls_filepath=None, *params):
             for database_name in re.findall("USE\s+(.*)", query):
                 #~ database = (database.rstrip("/")) + "/" + database_name
                 break
-        query = munge_script_for_mssql(query)
+        query = munge_script_for_mssql(query, params)
     elif driver == "snowflake":
         #
         # The most common configuration for Snowflake will be the database
