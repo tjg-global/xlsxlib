@@ -1,4 +1,5 @@
 import os, sys
+import re
 
 class Database():
 
@@ -6,6 +7,7 @@ class Database():
 
     def __init__(self, db):
         self.db = db
+        self.preamble = self.__class__.preamble
 
     @staticmethod
     def nextset(query_iter, cursor):
@@ -27,6 +29,9 @@ class Database():
                     yield row
             else:
                 break
+
+    def preprocess(self, query):
+        return query
 
     def pre_query(self):
         if self.preamble:
@@ -71,7 +76,33 @@ class SQLServer(Database):
 
 class Snowflake(Database):
 
-    preamble = "USE ROLE READER_ALL"
+    preamble = ""
+
+    def pre_query(self):
+        if self.preamble:
+            q = self.db.cursor()
+            try:
+                for statement in self.preamble.split(";"):
+                    q.execute(statement)
+            finally:
+                q.close()
+
+    def preprocess(self, query):
+        #
+        # Find any instance of a USE DATABASE etc. command
+        # Add it to the preamble and then remove from the query
+        # NB this is very naive, assuming that all the USE statements
+        # are at the top of the file. If any is effectively between
+        # different statements then this will fail to achieve the
+        # desired effect
+        #
+        r_use_statement = re.compile(
+            r"USE\s+(?:DATABASE|ROLE|WAREHOUSE|SCHEMA)\s+\w+;",
+            flags=re.IGNORECASE
+        )
+        use_statements = r_use_statement.findall(query)
+        self.preamble += "\n".join(use_statements)
+        return r_use_statement.sub("", query)
 
     def cursor_data(self, query):
         queries = [i.strip() for i in query.split(";") if i.strip()]

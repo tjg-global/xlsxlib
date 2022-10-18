@@ -67,6 +67,7 @@ def query2xlsx(db, query, spreadsheet_filepath, driver=None):
         raise RuntimeError("Could not determine dialect from driver %s" % driver)
 
     dialect_db = db_dialect(db)
+    query = dialect_db.preprocess(query)
     dialect_db.pre_query()
     for info in xlsxlib.xlsx(dialect_db.cursor_data(query), spreadsheet_filepath):
         yield info
