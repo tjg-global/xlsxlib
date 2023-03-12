@@ -83,4 +83,5 @@ def xlsx(data_iterator, spreadsheet_filepath):
             ws.column_dimensions[column].width = adjusted_width
 
 
+    yield "Save to %s" % spreadsheet_filepath
     wb.save(filename=spreadsheet_filepath)
