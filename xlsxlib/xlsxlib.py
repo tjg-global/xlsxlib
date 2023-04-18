@@ -64,7 +64,7 @@ def xlsx(data_iterator, spreadsheet_filepath):
         #
         n_row = 0
         for n_row, row in enumerate(rowset):
-            if (1 + n_row) % ROWSET_SIZE == 0:
+            if n_row > 0 and (n_row % ROWSET_SIZE == 0):
                 yield "%s row %d" % (sheet_name, n_row)
             ws.append(list(row))
         yield "%s %d rows" % (sheet_name, n_row)
