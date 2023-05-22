@@ -10,15 +10,9 @@ from . import sql2xlsxlib
 from . import connections
 
 DEFAULT_DATABASE = "SVR09/TDI"
-DEFAULT_DATABASES = {
-    "TDI": "SVR09",
-    "STAGING": "SVR-DWSQLPRD",
-    "WALRUS": "SVR-DWSQLPRD",
-}
 
 def from_code(code):
     return " ".join(code.split("_")).title()
-
 
 def parse_dburi_ex(dburi):
     if not re.match("[^:]+://", dburi):
@@ -31,7 +25,6 @@ def parse_dburi_ex(dburi):
         parsed.username or "",
         parsed.password or "",
     )
-
 
 def munge_script_for_mssql(query, params):
     query = re.sub(r"USE\s+.*", "", query)
