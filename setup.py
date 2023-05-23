@@ -13,8 +13,8 @@ setuptools.setup(
     packages = ["xlsxlib"],
     entry_points = {
         "console_scripts" : [
-            "gbundle=gbundle.gbundle:command_line",
             "xl=xlsxlib.xl:command_line",
+            "runsql=xlsxlib.runsql:command_line"
         ]
     }
 )
