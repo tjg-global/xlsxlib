@@ -12,8 +12,6 @@ LEADING_WORDS = set("create or replace transient".split())
 def dump_database(database_name, text):
     print("Database:", database_name)
     print(os.getcwd())
-    if not os.path.exists(database_name):
-        os.mkdir(database_name)
 
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
     for obj in r1.findall(text):
@@ -24,7 +22,7 @@ def dump_database(database_name, text):
         name = next(remaining_words)
         print(type, "=>", name)
 
-        type_dirpath = os.path.join(database_name, type.lower())
+        type_dirpath = os.path.join(type.lower())
         if not os.path.exists(type_dirpath):
             os.mkdir(type_dirpath)
 
