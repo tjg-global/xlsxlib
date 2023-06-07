@@ -1,4 +1,5 @@
 import os, sys
+import itertools
 import re
 
 def from_filepath(filepath):
@@ -7,6 +8,7 @@ def from_filepath(filepath):
         text = f.read()
     dump_database(database_name, text)
 
+LEADING_WORDS = set("create or replace transient".split())
 def dump_database(database_name, text):
     print("Database:", database_name)
     print(os.getcwd())
@@ -15,9 +17,11 @@ def dump_database(database_name, text):
 
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
     for obj in r1.findall(text):
-        line1 = obj.splitlines()[0].strip("(;")
-        line1 = line1[len("create or replace "):]
-        type, name = line1.split()
+        line1 = obj.splitlines()[0].lower().strip("(;")
+        words = iter(line1.split())
+        remaining_words = itertools.dropwhile(lambda x: x in LEADING_WORDS, words)
+        type = next(remaining_words)
+        name = next(remaining_words)
         print(type, "=>", name)
 
         type_dirpath = os.path.join(database_name, type.lower())
