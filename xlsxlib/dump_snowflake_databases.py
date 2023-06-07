@@ -42,12 +42,12 @@ def run(args):
         password=snowflake_info.password,
         account=snowflake_info.account,
         warehouse=snowflake_info.warehouse,
-        database=snowflake_info.database
+        database=snowflake_info.database,
+        role=snowflake_info.role
     )
     try:
         q = db.cursor()
         try:
-            q.execute("USE ROLE " + snowflake_info.role)
             q.execute("SELECT database_name FROM INFORMATION_SCHEMA.DATABASES LIMIT 10;")
             for row in q.fetchall():
                 database_name = row[0]
