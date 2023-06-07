@@ -129,6 +129,7 @@ def run(args):
             q.execute("SELECT database_name FROM INFORMATION_SCHEMA.DATABASES LIMIT 10;")
             for row in q.fetchall():
                 database_name = row[0]
+                print()
                 print(database_name)
                 q.execute("SELECT GET_DDL('database', %s, true);", [database_name])
                 ddl = q.fetchone()[0]
