@@ -1,15 +1,17 @@
 import os, sys
 import re
 
-def main(filepath):
-    db_name, _ = os.path.splitext(os.path.basename(filepath))
-    print("Database:", db_name)
-    print(os.getcwd())
-    if not os.path.exists(db_name):
-        os.mkdir(db_name)
-
+def from_filepath(filepath):
+    database_name, _ = os.path.splitext(os.path.basename(filepath))
     with open(filepath) as f:
         text = f.read()
+    dump_database(database_name, text)
+
+def dump_database(database_name, text):
+    print("Database:", database_name)
+    print(os.getcwd())
+    if not os.path.exists(database_name):
+        os.mkdir(database_name)
 
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
     for obj in r1.findall(text):
@@ -18,7 +20,7 @@ def main(filepath):
         type, name = line1.split()
         print(type, "=>", name)
 
-        type_dirpath = os.path.join(db_name, type.lower())
+        type_dirpath = os.path.join(database_name, type.lower())
         if not os.path.exists(type_dirpath):
             os.mkdir(type_dirpath)
 
@@ -26,5 +28,5 @@ def main(filepath):
             f.write(obj)
 
 if __name__ == '__main__':
-    main(*sys.argv[1:])
+    from_filepath(*sys.argv[1:])
 
