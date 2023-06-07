@@ -15,8 +15,7 @@ def dump_database(database_name, text):
 
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
     for obj in r1.findall(text):
-        line1 = obj.splitlines()[0].lower().strip("(;")
-        words = iter(line1.split())
+        words = iter(obj.lower().split())
         remaining_words = itertools.dropwhile(lambda x: x in LEADING_WORDS, words)
         type = next(remaining_words)
         name = next(remaining_words)
