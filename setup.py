@@ -14,7 +14,8 @@ setuptools.setup(
     entry_points = {
         "console_scripts" : [
             "xl=xlsxlib.xl:command_line",
-            "runsql=xlsxlib.runsql:command_line"
+            "runsql=xlsxlib.runsql:command_line",
+            "dump_snowflake_databases=xlsxlib.dump_snowflake_databases:command_line",
         ]
     }
 )
