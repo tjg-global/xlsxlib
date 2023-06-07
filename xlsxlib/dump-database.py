@@ -8,7 +8,7 @@ def main(filepath):
     if not os.path.exists(db_name):
         os.mkdir(db_name)
 
-    with open("c:/temp/mn.sql") as f:
+    with open(filepath) as f:
         text = f.read()
 
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
