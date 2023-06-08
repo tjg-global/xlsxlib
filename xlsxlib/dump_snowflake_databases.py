@@ -1,3 +1,5 @@
+"""Run over all databases in a Snowflake instance and produce DDL files for each object
+"""
 import os, sys
 import argparse
 import collections
@@ -19,7 +21,7 @@ logger.addHandler(stdout_handler)
 
 
 SNOWFLAKE_ACCOUNT = "global.eu-west-1"
-SNOWFLAKE_WAREHOUSE = "DWH_ETL_XSMALL"
+SNOWFLAKE_WAREHOUSE = "dwh_etl_xsmall"
 SNOWFLAKE_ROLE = "architect"
 SNOWFLAKE_DATABASE = "snowflake"
 
@@ -48,16 +50,20 @@ def run(args):
     try:
         q = db.cursor()
         try:
-            q.execute("SELECT database_name FROM INFORMATION_SCHEMA.DATABASES LIMIT 10;")
+            database_sql = "SELECT database_name FROM INFORMATION_SCHEMA.DATABASES"
+            if args.debug:
+                database_sql += " LIMIT 10;"
+            else:
+                database_sql += ";"
+            q.execute(database_sql)
             for row in q.fetchall():
-                database_name = row[0]
-                print()
-                print(database_name)
+                [database_name] = row
                 q.execute("SELECT GET_DDL('database', %s, true);", [database_name])
-                ddl = q.fetchone()[0]
-                with open("%s.sql" % database_name, "w") as f:
-                    f.write(ddl)
-                dump_database.dump_database(database_name, ddl)
+                [ddl] = q.fetchone()
+                if args.debug:
+                    with open("%s.sql" % database_name, "w") as f:
+                        f.write(ddl)
+                dump_database.dump_database(database_name, ddl, args.debug)
         finally:
             q.close()
     finally:
@@ -70,6 +76,9 @@ def command_line():
     parser.add_argument("--snowflake_account", help="Snowflake account")
     parser.add_argument("--snowflake_warehouse", help="Snowflake warehouse")
     parser.add_argument("--snowflake_role", help="Snowflake role")
+    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--no-debug', dest='debug', action='store_false')
+    parser.set_defaults(debug=False)
     args = parser.parse_args()
     run(args)
 
