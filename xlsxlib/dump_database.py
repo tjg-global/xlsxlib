@@ -43,8 +43,9 @@ def dump_database(database_name, text, debug=False):
     # and use those to form the relevant folder and file names
     #
     for obj in r1.findall(text):
-        words = iter(obj.lower().split())
+        words = iter(re.findall("[a-z_.]+", obj.lower()))
         remaining_words = itertools.dropwhile(lambda x: x in LEADING_WORDS, words)
+
         type = next(remaining_words)
         name = next(remaining_words)
         print(type, "=>", name)

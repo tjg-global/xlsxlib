@@ -47,15 +47,16 @@ def run(args):
         database=snowflake_info.database,
         role=snowflake_info.role
     )
+    name_pattern = args.name_pattern or '%'
     try:
         q = db.cursor()
         try:
-            database_sql = "SELECT database_name FROM INFORMATION_SCHEMA.DATABASES"
+            database_sql = "SELECT database_name FROM INFORMATION_SCHEMA.DATABASES WHERE database_name ILIKE %s"
             if args.debug:
                 database_sql += " LIMIT 10;"
             else:
                 database_sql += ";"
-            q.execute(database_sql)
+            q.execute(database_sql, [name_pattern])
             for row in q.fetchall():
                 [database_name] = row
                 q.execute("SELECT GET_DDL('database', %s, true);", [database_name])
@@ -71,6 +72,7 @@ def run(args):
 
 def command_line():
     parser = argparse.ArgumentParser()
+    parser.add_argument("name_pattern", help="A SQL-wildcard pattern identifying one or more database names", nargs='?')
     parser.add_argument("--snowflake_user", help="Snowflake username")
     parser.add_argument("--snowflake_password", help="Snowflake password")
     parser.add_argument("--snowflake_account", help="Snowflake account")
