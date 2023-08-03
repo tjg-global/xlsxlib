@@ -21,9 +21,7 @@ def from_filepath(filepath):
         text = f.read()
     dump_database(database_name, text)
 
-PREAMBLE = r'(?:create or replace)(?:transient)?\s+(database|table|schema|sequence|task|view|materialized view)\s+([0-9A-Za-z_.$"]+)'
-#~ LEADING_WORDS = set("create or replace transient".split())
-#~ TYPE_NAMES = set(["database", "table", "schema", "sequence", "table", "task", "view", "materialized view"])
+R_PREAMBLE = re.compile(r'(?:create or replace)\s*(?:transient)?\s+(database|table|schema|sequence|task|view|materialized view)\s+([0-9A-Za-z_.$"]+)')
 def dump_database(database_name, text, debug=False):
     """Take the text of a database GET_DDL and split into component objects
 
@@ -32,15 +30,11 @@ def dump_database(database_name, text, debug=False):
     type folders, but the database name has been retained in case it's useful to
     return to that approach
     """
-    print("\nDatabase:", database_name)
-
     #
     # Break the main DDL out into its component objects, each one starting
     # with "CREATE OR REPLACE" and ending with a semicolon
     #
-    #~ r = re.compile(r'(?:create or replace)(?:transient)?\s+(table|view|materialized view)\s+([0-9A-Za-z_."]+)')
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
-    r_preamble = re.compile(PREAMBLE)
 
     #
     # Within each object definition, skip to the object type / object name
@@ -48,14 +42,13 @@ def dump_database(database_name, text, debug=False):
     #
     already_seen = set()
     for obj in r1.findall(text):
-        print(obj)
-        type, name = r_preamble.match(obj.lower()).groups()
-        name = name.replace('"', '')
-        #~ words = iter(re.findall('[0-9A-Za-z_."]+', obj.lower()))
-        #~ remaining_words = itertools.dropwhile(lambda x: x in LEADING_WORDS, words)
+        matched = R_PREAMBLE.match(obj.lower())
+        if not matched:
+            print(obj)
+            raise RuntimeError("Unable to match type, name")
 
-        #~ type = next(remaining_words)
-        #~ name = next(remaining_words).replace('"', '')
+        type, name = matched.groups()
+        name = name.replace('"', '')
         print(type, "=>", name)
         if (type, name) in already_seen:
             raise RuntimeError("Already seen this combination: %s/%s" % (type, name))
@@ -66,8 +59,21 @@ def dump_database(database_name, text, debug=False):
         if not os.path.exists(type_dirpath):
             os.mkdir(type_dirpath)
 
-        with open(os.path.join(type_dirpath, "%s.sql" % (name)), "w") as f:
+        filename = re.sub(r"[ ,.<>\"]", "_", name)
+        with open(os.path.join(type_dirpath, "%s.sql" % filename), "w") as f:
             f.write(obj)
+
+def dump_imported_database(database_name, debug=False):
+    type_dirpath = "database"
+    if not os.path.exists(type_dirpath):
+        os.mkdir(type_dirpath)
+
+    filename = re.sub(r"[ ,.<>\"]", "_", database_name)
+    with open(os.path.join(type_dirpath, "%s.sql" % filename), "w") as f:
+        f.write(f"""create or replace database {database_name}:
+-- This is an 'Imported Database'
+-- The "GET_DDL" function has not extracted any objects within this database
+""")
 
 if __name__ == '__main__':
     from_filepath(*sys.argv[1:])

@@ -19,16 +19,33 @@ stdout_handler = logging.StreamHandler()
 stdout_handler.setLevel(logging.DEBUG)
 logger.addHandler(stdout_handler)
 
+log_file_path = "error_log.txt"
+log_format = "%(name)s - %(asctime)s - %(levelname)s - %(message)s"
+file_handler = logging.FileHandler(log_file_path)
+file_handler.setFormatter(logging.Formatter(log_format))
+file_handler.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
 
 SNOWFLAKE_ACCOUNT = "global.eu-west-1"
 SNOWFLAKE_WAREHOUSE = "dwh_etl_xsmall"
-SNOWFLAKE_ROLE = "architect"
+SNOWFLAKE_ROLE = "ACCOUNTADMIN"
 SNOWFLAKE_DATABASE = "snowflake"
 
 SnowflakeInfo = collections.namedtuple(
     "SnowflakeInfo",
     ["user", "password", "account", "warehouse", "role", "database"]
 )
+
+def dump_normal_databases(database_name, args, q):
+    q.execute("SELECT GET_DDL('database', %s, true);", [database_name])
+    [ddl] = q.fetchone()
+    if args.debug:
+        with open("%s.sql" % database_name, "w") as f:
+            f.write(ddl)
+    dump_database.dump_database(database_name, ddl, args.debug)
+
+def dump_imported_databases(database_name):
+    dump_database.dump_imported_database(database_name)
 
 def run(args):
     snowflake_info = SnowflakeInfo(
@@ -51,20 +68,19 @@ def run(args):
     try:
         q = db.cursor()
         try:
-            database_sql = "SELECT database_name FROM INFORMATION_SCHEMA.DATABASES WHERE database_name ILIKE %s"
+            database_sql = "SELECT database_name, type FROM INFORMATION_SCHEMA.DATABASES WHERE database_name ILIKE %s"
             if args.debug:
                 database_sql += " LIMIT 10;"
             else:
                 database_sql += ";"
             q.execute(database_sql, [name_pattern])
             for row in q.fetchall():
-                [database_name] = row
-                q.execute("SELECT GET_DDL('database', %s, true);", [database_name])
-                [ddl] = q.fetchone()
-                if args.debug:
-                    with open("%s.sql" % database_name, "w") as f:
-                        f.write(ddl)
-                dump_database.dump_database(database_name, ddl, args.debug)
+                [database_name, type] = row
+                logger.debug("DATABASE: %s - %s", database_name, type)
+                if type == 'STANDARD':
+                    dump_normal_databases(database_name, args, q)
+                else:
+                    dump_imported_databases(database_name)
         finally:
             q.close()
     finally:
