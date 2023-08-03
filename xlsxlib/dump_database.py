@@ -21,7 +21,9 @@ def from_filepath(filepath):
         text = f.read()
     dump_database(database_name, text)
 
-LEADING_WORDS = set("create or replace transient".split())
+PREAMBLE = r'(?:create or replace)(?:transient)?\s+(database|table|schema|sequence|task|view|materialized view)\s+([0-9A-Za-z_.$"]+)'
+#~ LEADING_WORDS = set("create or replace transient".split())
+#~ TYPE_NAMES = set(["database", "table", "schema", "sequence", "table", "task", "view", "materialized view"])
 def dump_database(database_name, text, debug=False):
     """Take the text of a database GET_DDL and split into component objects
 
@@ -36,19 +38,29 @@ def dump_database(database_name, text, debug=False):
     # Break the main DDL out into its component objects, each one starting
     # with "CREATE OR REPLACE" and ending with a semicolon
     #
+    #~ r = re.compile(r'(?:create or replace)(?:transient)?\s+(table|view|materialized view)\s+([0-9A-Za-z_."]+)')
     r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL)
+    r_preamble = re.compile(PREAMBLE)
 
     #
     # Within each object definition, skip to the object type / object name
     # and use those to form the relevant folder and file names
     #
+    already_seen = set()
     for obj in r1.findall(text):
-        words = iter(re.findall("[a-z_.]+", obj.lower()))
-        remaining_words = itertools.dropwhile(lambda x: x in LEADING_WORDS, words)
+        print(obj)
+        type, name = r_preamble.match(obj.lower()).groups()
+        name = name.replace('"', '')
+        #~ words = iter(re.findall('[0-9A-Za-z_."]+', obj.lower()))
+        #~ remaining_words = itertools.dropwhile(lambda x: x in LEADING_WORDS, words)
 
-        type = next(remaining_words)
-        name = next(remaining_words)
+        #~ type = next(remaining_words)
+        #~ name = next(remaining_words).replace('"', '')
         print(type, "=>", name)
+        if (type, name) in already_seen:
+            raise RuntimeError("Already seen this combination: %s/%s" % (type, name))
+        else:
+            already_seen.add((type, name))
 
         type_dirpath = os.path.join(type.lower())
         if not os.path.exists(type_dirpath):
