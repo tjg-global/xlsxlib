@@ -10,7 +10,7 @@ import logging
 
 import snowflake.connector
 
-import dump_database
+from . import dump_database
 
 logger = logging.getLogger(os.path.basename(__file__))
 logger.setLevel(logging.DEBUG)
