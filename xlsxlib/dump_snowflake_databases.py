@@ -10,21 +10,27 @@ import logging
 
 import snowflake.connector
 
-from . import connections
-from . import dump_database
+import dump_database
 
 logger = logging.getLogger(os.path.basename(__file__))
 logger.setLevel(logging.DEBUG)
+
 stdout_handler = logging.StreamHandler()
-stdout_handler.setLevel(logging.DEBUG)
+stdout_handler.setLevel(logging.INFO)
 logger.addHandler(stdout_handler)
 
-log_file_path = "error_log.txt"
+log_file_path = "dump_snowflake_databases.log"
 log_format = "%(name)s - %(asctime)s - %(levelname)s - %(message)s"
 file_handler = logging.FileHandler(log_file_path)
 file_handler.setFormatter(logging.Formatter(log_format))
 file_handler.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
+
+error_file_path = "dump_snowflake_databases.errors.log"
+error_handler = logging.FileHandler(error_file_path)
+error_handler.setFormatter(logging.Formatter(log_format))
+error_handler.setLevel(logging.WARN)
+logger.addHandler(error_handler)
 
 SNOWFLAKE_ACCOUNT = "global.eu-west-1"
 SNOWFLAKE_WAREHOUSE = "dwh_etl_xsmall"
@@ -42,12 +48,19 @@ def dump_normal_databases(database_name, args, q):
     if args.debug:
         with open("%s.sql" % database_name, "w") as f:
             f.write(ddl)
-    dump_database.dump_database(database_name, ddl, args.debug)
+    dump_database.dump_database(database_name, ddl, args.debug, logger=logger)
 
 def dump_imported_databases(database_name):
-    dump_database.dump_imported_database(database_name)
+    dump_database.dump_imported_database(database_name, logger=logger)
 
 def run(args):
+    #
+    # If we're running for all databases, clear all files first
+    # so we get a clear view of deleted databases
+    #
+    if not args.name_pattern:
+        dump_database.remove_existing_files(logger=logger)
+
     snowflake_info = SnowflakeInfo(
         args.snowflake_user or os.environ['DBT_PROFILES_USER'],
         args.snowflake_password or os.environ['DBT_PROFILES_PASSWORD'],
@@ -68,7 +81,7 @@ def run(args):
     try:
         q = db.cursor()
         try:
-            database_sql = "SELECT database_name, type FROM INFORMATION_SCHEMA.DATABASES WHERE database_name ILIKE %s"
+            database_sql = "SELECT database_name, type FROM INFORMATION_SCHEMA.DATABASES WHERE database_name ILIKE %s ORDER BY database_name;"
             if args.debug:
                 database_sql += " LIMIT 10;"
             else:
@@ -76,7 +89,7 @@ def run(args):
             q.execute(database_sql, [name_pattern])
             for row in q.fetchall():
                 [database_name, type] = row
-                logger.debug("DATABASE: %s - %s", database_name, type)
+                logger.info("DATABASE: %s - %s", database_name, type)
                 if type == 'STANDARD':
                     dump_normal_databases(database_name, args, q)
                 else:
