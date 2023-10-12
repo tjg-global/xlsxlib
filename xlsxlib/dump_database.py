@@ -89,6 +89,11 @@ def dump_database(database_name, text, debug=False, logger=logging):
     remove_existing_files(database_name, logger)
 
     #
+    # Replace windows-style CR/LF line feeds with unix-style LF only
+    #
+    text = text.replace("\r", "")
+
+    #
     # Break the main DDL out into its component objects, each one starting
     # with "CREATE OR REPLACE" and ending with a semicolon.
     # FIXME: this won't actually work successfully for, eg, functions & procedures
