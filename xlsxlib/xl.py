@@ -14,18 +14,6 @@ DEFAULT_DATABASE = "SVR09/TDI"
 def from_code(code):
     return " ".join(code.split("_")).title()
 
-def parse_dburi_ex(dburi):
-    if not re.match("[^:]+://", dburi):
-        dburi = "mssql://" + dburi
-    parsed = urlparse.urlparse(dburi)
-    return (
-        parsed.scheme or "mssql",
-        parsed.hostname or "",
-        (parsed.path or "").lstrip("/"),
-        parsed.username or "",
-        parsed.password or "",
-    )
-
 def munge_script_for_mssql(query, params):
     query = re.sub(r"USE\s+.*", "", query)
     query = re.sub(r"\bGO\b", "", query)
@@ -67,7 +55,7 @@ def main(script_filepath, database=None, xls_filepath=None, *params):
     # statement, use the database in that USE statement (and then
     # strip it out!). NB only do this for MSSQL
     #
-    driver, server_name, database_name, username, password = parse_dburi_ex(database)
+    driver, server_name, database_name, username, password = connections.parse_dburi_ex(database)
     print("Driver is", driver)
     if driver == "mssql":
         if not database_name:

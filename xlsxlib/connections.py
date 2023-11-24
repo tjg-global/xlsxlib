@@ -1,9 +1,24 @@
 import os
+import re
+import urllib.parse
+
 import pyodbc
 try:
     import snowflake.connector as snow
 except ImportError:
     snow = None
+
+def parse_dburi_ex(dburi):
+    if not re.match("[^:]+://", dburi):
+        dburi = "mssql://" + dburi
+    parsed = urllib.parse.urlparse(dburi)
+    return (
+        parsed.scheme or "mssql",
+        parsed.hostname or "",
+        (parsed.path or "").lstrip("/"),
+        parsed.username or "",
+        parsed.password or "",
+    )
 
 def mssql(server, database, username=None, password=None, **kwargs):
     connectors = ["Driver={ODBC Driver 17 for SQL Server}"]
