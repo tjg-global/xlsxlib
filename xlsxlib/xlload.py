@@ -1,46 +1,24 @@
 #!python3
-"""csv2table - load a CSV file into a database table
-
-Although there is a flexible approach to parameters, the expected use is:
-
-* Take the STAGING database DSN and the Datasources root from the .dtsconfig file via SsisFinanceConfig
-* Take the location (relative to Datasources) or an .ini file on the command line (--ini=)
-* Read filepath, tablename & truncate from the [setup] section of the .ini
-* Specify column mappings, only where they need to be overridden, in the [mappings] section of the .ini
+"""xlload - load an Excel file into a database table
 """
 import os, sys
 import argparse
+import csv
 import datetime
 import getpass
 import itertools
+import logging
 import re
 import tempfile
 import time
-import traceback
-import urlparse
 
 import openpyxl
-import pyodbc
-import requests
-from xml.etree import ElementTree
 
-import ini
-import sql
+from . import connections
 
 NAME, _ = os.path.splitext(os.path.basename(__file__))
 UNCONVERTED = object()
 TRUNCATE = True
-
-def log(text):
-    """Emergency logger for when you just can't work out what's going wrong
-    """
-    with open("c:/temp/csv2table.log", "a") as f:
-        f.write("%s: %s\r\n" % (time.asctime, text))
-
-def value_from_config(config, variable_name):
-    xpath = r".//Configuration[@Path='\Package.Variables[%s].Properties[Value]']/ConfiguredValue" % variable_name
-    for element in config.findall(xpath):
-        return element.text
 
 def as_code(name):
     return "_".join(name.lower().split())
@@ -49,8 +27,24 @@ _converters = {
     datetime.datetime : lambda v: v.strftime("%d %b %Y"),
     datetime.date : lambda v: v.strftime("%d %b %Y"),
     type(None) : lambda v: "",
-    unicode : lambda v: v.encode("utf-8"),
+    str: lambda v: v.encode("utf-8"),
 }
+
+def sheet_metadata(sheet):
+    """Return useful metadata from the Excel sheet
+
+    Read the first line to retrieve header names
+    Read the next (non-blank) line to retrieve datatype info
+    Determine the number of rows
+
+    Return [headers], [types], n_rows
+    """
+    irows = sheet.iter_rows()
+    header_values = (c.value for c in next(irows))
+    headers = list(itertools.takewhile(lambda v: v is not None, header_values))
+    types = [type("" if c.value is None else c.value) for (c, _) in zip(next(irows), headers)]
+    remaining_rows = list(row for row in irows if any(c.value for c in row))
+    return headers, types, 1 + len(remaining_rows)
 
 def sheet_as_rows(sheet):
     for n_row, row in enumerate(sheet):
@@ -63,8 +57,8 @@ def sheet_as_rows(sheet):
         else:
             break
 
-def _xlsx_to_csv(xlsx_filepath, params):
-    """Quick hack to use openpyxl to convert .xls[x] files to .csv
+def sheet_from_xlsx(xlsx_filepath, sheet_name):
+    """Quick hack to open openpyxl to convert .xls[x] files to .csv
     """
     workbook = openpyxl.load_workbook(
         xlsx_filepath,
@@ -74,11 +68,11 @@ def _xlsx_to_csv(xlsx_filepath, params):
     # If a sheet name is specified use that, otherwise use the first sheet
     # in the workbook
     #
-    if params.sheet_name:
-        sheet = workbook[params.sheet_name]
+    if sheet_name:
+        return workbook[sheet_name]
     else:
         for sheet in workbook:
-            break
+            return sheet
 
     #
     # Assume the first row is representative.
@@ -99,45 +93,6 @@ def _xlsx_to_csv(xlsx_filepath, params):
     with open(csv_filepath, "wb") as f:
         csv.writer(f).writerows(sheet_as_rows(sheet))
     return csv_filepath
-
-def _url_to_lines(url, params):
-    """Take a -- possibly wildcard -- URL and find  the "newest" version
-
-    Then iterate over the lines of the corresponding resource, yielding
-    one line at a time to the csv reader
-    """
-    #
-    # Distinguish "index page" and "filename" part of the URL
-    #
-    segments = url.split("/")
-    index_url = "/".join(segments[:-1]) + "/"
-    file_pattern = re.compile(segments[-1])
-
-    #
-    # Read the index page and find all filenames which
-    # match the incoming wildcard. Find the newest which is
-    # assumed to be the highest when sorted.
-    #
-    r = requests.get(index_url, verify=False)
-    r.raise_for_status()
-    index_text = r.text
-    filenames = file_pattern.findall(index_text)
-    latest_filename = max(filenames)
-
-    #
-    # Request the newest file, streaming and iterating. This will hopefully
-    # overcome the limitation of the Python line iterator where you can't
-    # specify the delimiter.
-    #
-    r = requests.get(index_url + latest_filename, stream=True, verify=False)
-    r.raise_for_status()
-    #
-    # First, inject the field names if they're given
-    #
-    if params.fields:
-        yield params.delimiter.join(params.fields) + "\r\n"
-    for line in r.iter_lines(delimiter="\r\n"):
-        yield line
 
 class DictReader(csv.DictReader):
     """Our CSV files can have spaces around their field headers. Since these
@@ -162,50 +117,6 @@ class DictReader(csv.DictReader):
                 self._fieldnames.append(as_code(f))
             else:
                 self._fieldnames.append(f)
-
-class Logger(object):
-    """Roughly simulate a Python logger, allowing the usual actions,
-    but writing them directly to a database log.
-    """
-
-    def __init__(self, db, job_id, source=NAME):
-        self.db = db
-        self.job_id = job_id
-        self.source = source
-        self.error_has_occurred = False
-
-    def log(self, action, notes):
-        q = self.db.cursor()
-        try:
-            q.execute(
-                "EXEC admin.pr_log @i_job_id = ?, @i_source = ?, @i_action = ?, @i_notes = ?",
-                [self.job_id, self.source, action.upper(), notes]
-            )
-        finally:
-            q.close()
-
-    def debug(self, notes):
-        #print(notes + "\n\n", file=sys.stdout)
-        return self.log("debug", notes)
-
-    def info(self, notes):
-        print(notes + "\n\n", file=sys.stdout)
-        return self.log("info", notes)
-
-    def warn(self, notes):
-        print(notes + "\n\n", file=sys.stdout)
-        return self.log("warning", notes)
-    warning = warn
-
-    def error(self, notes):
-        print(notes + "\n\n", file=sys.stderr)
-        self.error_has_occurred = True
-        return self.log("error", notes)
-
-    def exception(self, notes):
-        print(notes + "\n\n" + traceback.format_exc(), file=sys.stderr)
-        self.error_has_occurred = True
-        return self.log("error", notes + "\n\n" + traceback.format_exc())
 
 def collapse_whitespace(value):
     return re.sub(r"\s{2,}", " ", value)
@@ -418,51 +329,49 @@ def _preprocess(iterator):
     for line in iterator:
         yield line.strip().replace("\n", " ")
 
-def csv2table(db, logger, params):
-    schema, table = fqon(db, params.tablename)
-    if table is None:
-        logger.error("No such table: %s" % params.tablename)
-        raise RuntimeError
-    else:
-        fq_tablename = "[%s].[%s]" % (schema, table)
-        logger.debug("Writing into %s" % fq_tablename)
+def load_xlsx(db, logger, params):
+    #~ schema, table = fqon(db, params.tablename)
+    #~ if table is None:
+        #~ logger.error("No such table: %s" % params.tablename)
+        #~ raise RuntimeError
+    #~ else:
+        #~ fq_tablename = "[%s].[%s]" % (schema, table)
+        #~ logger.debug("Writing into %s" % fq_tablename)
 
-    if params.truncate_first:
-        logger.debug("Truncate %s" % fq_tablename)
-        db.execute("TRUNCATE TABLE %s" % fq_tablename)
-    else:
-        logger.debug("Not truncating")
+    #~ if params.truncate_first:
+        #~ logger.debug("Truncate %s" % fq_tablename)
+        #~ db.execute("TRUNCATE TABLE %s" % fq_tablename)
+    #~ else:
+        #~ logger.debug("Not truncating")
 
-    mappings = params.mappings or {}
-    if mappings:
-        for k, v in mappings.items():
-            logger.debug("Mapping %s to %s" % (k, v))
+    #~ mappings = params.mappings or {}
+    #~ if mappings:
+        #~ for k, v in mappings.items():
+            #~ logger.debug("Mapping %s to %s" % (k, v))
 
-    ignore_csv = params.ignore_csv or []
-    if ignore_csv:
-        logger.debug("Ignoring csv columns: %s" % (", ".join(ignore_csv)))
+    #~ ignore_csv = params.ignore_csv or []
+    #~ if ignore_csv:
+        #~ logger.debug("Ignoring csv columns: %s" % (", ".join(ignore_csv)))
 
-    ignore_database = params.ignore_database or []
-    if ignore_database:
-        logger.debug("Ignoring database columns: %s" % (", ".join(ignore_database)))
+    #~ ignore_database = params.ignore_database or []
+    #~ if ignore_database:
+        #~ logger.debug("Ignoring database columns: %s" % (", ".join(ignore_database)))
 
     filepath = params.filepath
-    if filepath.startswith("http"):
-        n_rows_in_file = 0
-        iterator = _url_to_lines(filepath, params)
-        filepath = urlparse.urlsplit(filepath).path # Rename to ensure credentials aren't shown
-        closer = None
-    else:
-        if not os.path.exists(filepath):
-            raise RuntimeError("Cannot find %s" % filepath)
-        #
-        # To give a "n of n loaded" message, determine how many lines are in the file
-        #
-        with open(filepath, "rb") as f:
-            n_rows_in_file = len(list(f)) -1
-        f = iterator = open(filepath, "rb")
-        closer = f.close
-    logger.debug("Reading from %s" % filepath)
+    if not os.path.exists(filepath):
+        raise RuntimeError("Cannot find %s" % filepath)
+
+    sheet = sheet_from_xlsx(params.filepath, params.sheet_name)
+    headers, types, n_rows = sheet_metadata(sheet)
+    print("Headers:", headers)
+    print("Types:", types)
+    print("Rows:", n_rows)
+    return
+
+    #
+    # To give a "n of n loaded" message, determine how many lines are in the file
+    #
+    n_rows_in_file = 0
 
     database_columns = dict(table_columns(db, schema, table))
     #
@@ -556,9 +465,7 @@ def csv2table(db, logger, params):
     if n_rows_failed:
         logger.error("%d rows could not be loaded" % n_rows_failed)
 
-def main(db, params):
-    if params.filepath.endswith(".xlsx"):
-        params.filepath = _xlsx_to_csv(params.filepath, params)
+def main(db, params, logger):
     #
     # If no tablename is supplied, take the part of the CSV basename before the extension.
     # ie c:/temp/some.csv -> "some"
@@ -566,9 +473,8 @@ def main(db, params):
     #
     if params.tablename is None:
         params.tablename, _ = os.path.splitext(os.path.basename(params.filepath))
-    logger = Logger(db, params.job_id, params.tablename)
     try:
-        return csv2table(
+        return load_xlsx(
             db, logger, params
         )
     except KeyboardInterrupt:
@@ -581,15 +487,12 @@ def main(db, params):
         #
         logger.exception("Some problem in the main process")
 
-def get_db(args, xml_config):
-    if args.staging_dburi:
-        return sql.database(args.staging_dburi)
-    elif args.staging_oledb_dsn:
-        return sql.connection_from_oledb_dsn(args.staging_oledb_dsn)
-    elif xml_config:
-        return sql.connection_from_oledb_dsn(value_from_config(xml_config, "Config::DbStaging"))
-    else:
-        raise RuntimeError("No connection string could be found")
+def get_db(args):
+    driver, server_name, database_name, username, password = connections.parse_dburi_ex(args.dburi)
+    if driver == "mssql":
+        return connections.mssql(server_name, database_name, username, password)
+    elif driver == "snowflake":
+        return connections.snowflake(server_name, database_name, username, password)
 
 class Params(object): pass
 
@@ -597,7 +500,7 @@ _delimiter_map = {
     "\\t" : "\t"
 }
 
-def get_params(args, ini_config, xml_config, logger):
+def get_params(args, logger):
     """Determine parameters from the command line, ini file or SSIS config
 
     The result is a params namespace object. Command line arguments always
@@ -606,109 +509,59 @@ def get_params(args, ini_config, xml_config, logger):
     to get the logger working.
     """
     params = Params()
-    if xml_config:
-        datasources_filepath = value_from_config(xml_config, "Config::Datasources")
-    else:
-        datasources_filepath = "."
 
-    params.job_id = args.job_id or ini_config.setup.job_id or ("%s-%s" % (getpass.getuser(), time.strftime("%Y%m%d-%H%M%S")))
+    params.job_id = "%s-%s" % (getpass.getuser(), time.strftime("%Y%m%d-%H%M%S"))
 
-    filepath = args.filepath or ini_config.setup.filepath
+    filepath = args.filepath
     if not filepath:
-        raise RuntimeError("The path to a .csv file must be given")
+        raise RuntimeError("The path to a .xlsx file must be given")
     if "!" in filepath:
         filepath, _, params.sheet_name = filepath.partition("!")
     else:
         params.sheet_name = None
-    if not filepath.startswith("http"):
-        filepath = os.path.join(datasources_filepath, filepath)
     params.filepath = filepath
 
-    params.tablename = args.tablename or ini_config.setup.tablename
+    params.tablename = args.tablename
 
     if args.truncate is not None:
         truncate = args.truncate
-    elif ini_config.setup.truncate is not None:
-        truncate = int(ini_config.setup.truncate)
     else:
         truncate = TRUNCATE
     params.truncate_first = bool(truncate)
 
-    params.fields = [i.strip() for i in (ini_config.setup.fields or "").split(",") if i.strip()]
-    params.ignore_csv = [i.strip() for i in (ini_config.setup.ignore_csv or "").split(",") if i.strip()]
-    params.ignore_database = [i.strip() for i in (ini_config.setup.ignore_database or "").split(",") if i.strip()]
+    params.fields = []
     params.log_every_n_rows = args.log_every_n_rows
-    if params.log_every_n_rows is None:
-        params.log_every_n_rows = ini_config.setup.log_every_n_rows
     if params.log_every_n_rows is None:
         params.log_every_n_rows = 1
     params.log_every_n_rows = int(params.log_every_n_rows)
-    params.mappings = dict(ini_config.mappings.items())
-
-    params.delimiter = args.delimiter or ini_config.setup.delimiter or ','
-    #
-    # If necessary map non-printing delimiters (eg tab)
-    #
-    params.delimiter = _delimiter_map.get(params.delimiter, params.delimiter)
-
-    params.fail_fast = args.fail_fast or ini_config.setup.fail_fast or False
+    params.fail_fast = args.fail_fast or False
 
     return params
 
-if __name__ == '__main__':
+def command_line():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ini", help="Path to the .ini file specifying this load (absolute or relative to SSIS/loaders/staging)")
-    parser.add_argument("--staging_dburi", help="(for testing) mssql://[[user:]password@]server[/db]")
-    parser.add_argument("--staging_oledb_dsn", help="SSIS-style OLEDB string")
-    parser.add_argument("--filepath", help="Full path to the CSV file")
-    parser.add_argument("--tablename", help="schema.tablename (default: same as the CSV filename)")
-    parser.add_argument("--job_id", help="SSIS-style job id (default: username-yyyymmdd-hhmiss)")
+    parser.add_argument("--dburi", help="(for testing) mssql://[[user:]password@]server[/db]", required=True)
+    parser.add_argument("--filepath", help="Full path to the xlsx file", required=True)
+    parser.add_argument("--tablename", help="schema.tablename (default: same as the filename)")
     parser.add_argument('--truncate', dest='truncate', action='store_true')
     parser.add_argument('--no-truncate', dest='truncate', action='store_false')
     parser.add_argument('--log-every-n-rows', type=int, dest='log_every_n_rows')
-    parser.add_argument('--delimiter', help="Column separator in the data source file")
     parser.add_argument('--fail-fast', help="Fail the load on the first error", action="store_true", dest="fail_fast")
     parser.set_defaults(truncate=None)
     args = parser.parse_args()
 
-    config_filepath = os.environ.get("SsisFinanceConfig")
-    if config_filepath:
-        with open(config_filepath) as f:
-            xml_config = ElementTree.parse(f)
-    else:
-        xml_config = None
-
-    if xml_config:
-        ssis_filepath = value_from_config(xml_config, "User::configSsisFilePathRoot")
-        ini_dirpath = os.path.join(ssis_filepath, "loaders", "staging")
-    else:
-        ini_dirpath = "."
-
-    db = get_db(args, xml_config)
+    logger = logging.getLogger(NAME)
+    db = get_db(args)
     db.autocommit = True
     try:
         #
-        # Try to use the job id from command line but fall back to "csv2table" so
+        # Try to use the job id from command line but fall back to "load_xlsx" so
         # at least it goes somewhere.
         #
-        logger = Logger(db, args.job_id or "csv2table")
-        if args.ini:
-            ini_filepath = os.path.join(ini_dirpath, args.ini)
-            if not os.path.exists(ini_filepath):
-                logger.error("No .ini file at %s" % ini_filepath)
-                raise IOError()
-            ini_config = ini.Ini(ini_filepath)
-        else:
-            ini_config = ini.Ini()
-        params = get_params(args, ini_config, xml_config, logger)
-        main(db, params)
-    except:
-        #
-        # Don't re-raise an exception here as this causes the process to exit with -1
-        # which SSIS doesn't handle very well
-        #
-        logger.exception("csv2table error:")
+        params = get_params(args, logger)
+        main(db, params, logger)
     finally:
         db.close()
 
-    sys.exit(int(logger.error_has_occurred))
+if __name__ == '__main__':
+    command_line()
