@@ -94,6 +94,7 @@ def xlsx(data_iterator, spreadsheet_filepath):
             adjusted_width = (max_length + 2) * 1.2
             ws.column_dimensions[column].width = adjusted_width
 
+        ws.auto_filter.ref = ws.dimensions
 
     yield "Save to %s" % spreadsheet_filepath
     wb.save(filename=spreadsheet_filepath)
