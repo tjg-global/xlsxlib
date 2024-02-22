@@ -30,7 +30,23 @@ class Database():
             else:
                 break
 
+    @staticmethod
+    def from_code(code):
+        return " ".join(code.split("_")).title()
+
+    def replace_variables(self, query):
+        vars = re.findall(r"%\((\w+)\)s", query)
+        values = {}
+        for index, var in enumerate(vars):
+            if var not in values:
+                values[var] = input("%s: " % self.from_code(var))
+        if values:
+            query = query % values
+
+        return query
+
     def preprocess(self, query):
+        query = self.replace_variables(query)
         return query
 
     def pre_query(self):
@@ -102,7 +118,11 @@ class Snowflake(Database):
         )
         use_statements = r_use_statement.findall(query)
         self.preamble += "\n".join(use_statements)
-        return r_use_statement.sub("", query)
+        query = r_use_statement.sub("", query)
+
+        query = self.replace_variables(query)
+
+        return query
 
     def cursor_data(self, query):
         queries = [i.strip() for i in query.split(";") if i.strip()]
