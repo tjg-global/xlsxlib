@@ -4,12 +4,11 @@ import setuptools
 
 setuptools.setup(
     name='xlsxlib',
-    version='1.18.05',
+    version='1.19.00',
     description='SQL to Excel',
     author='Tim Golden',
     author_email='tim.golden@global.com',
     install_requires = ['openpyxl', 'pyodbc', 'snowflake-connector-python'],
-    #~ py_modules = ["sql2xlsxlib", "xlsxlib"],
     packages = ["xlsxlib"],
     entry_points = {
         "console_scripts" : [

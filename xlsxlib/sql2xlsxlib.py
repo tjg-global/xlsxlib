@@ -1,24 +1,9 @@
 import os, sys
-import re
 
 from . import xlsxlib
 from . import dialects
 
 class x_sql2xlsxlib(Exception): pass
-
-
-#~ def guess_dialect(db):
-    #~ candidates = {"Snowflake": "Snowflake", "sqlite3": "sqlite", "SQLSVR32.DLL": "SQL_server"}
-    #~ try:
-        #~ db_dir = str(db.__dir__)
-        #~ dialect_name = db_dir.split()[4].replace('.', '').replace('Connection', '')
-        #~ return candidates[dialect_name]
-    #~ except (TypeError, KeyError):
-        #~ try:
-            #~ driver = db.getinfo(pyodbc.SQL_DRIVER_NAME)
-            #~ return dialects[driver]
-        #~ except (AttributeError, KeyError):
-            #~ return None
 
 def rows(cursor, arraysize=-1):
     """Generate rows using an optional arrayfetch size
@@ -31,7 +16,7 @@ def rows(cursor, arraysize=-1):
         else:
             break
 
-def query2xlsx(db, query, spreadsheet_filepath, driver=None):
+def query2xlsx(db, query, spreadsheet_filepath, driver, params=()):
     """query2xl - Convert the output from a query to a spreadsheet
 
     Parameters:
@@ -67,7 +52,7 @@ def query2xlsx(db, query, spreadsheet_filepath, driver=None):
         raise RuntimeError("Could not determine dialect from driver %s" % driver)
 
     dialect_db = db_dialect(db)
-    query = dialect_db.preprocess(query)
+    query = dialect_db.preprocess(query, params)
     dialect_db.pre_query()
     for info in xlsxlib.xlsx(dialect_db.cursor_data(query), spreadsheet_filepath):
         yield info

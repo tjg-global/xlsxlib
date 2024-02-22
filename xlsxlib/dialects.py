@@ -34,20 +34,22 @@ class Database():
     def from_code(code):
         return " ".join(code.split("_")).title()
 
-    def replace_variables(self, query):
+    def replace_variables(self, query, params):
         vars = re.findall(r"%\((\w+)\)s", query)
         values = {}
         for index, var in enumerate(vars):
-            if var not in values:
-                values[var] = input("%s: " % self.from_code(var))
+            try:
+                values[var] = params[index]
+            except IndexError:
+                if var not in values:
+                    values[var] = input("%s: " % self.from_code(var))
         if values:
             query = query % values
 
         return query
 
-    def preprocess(self, query):
-        query = self.replace_variables(query)
-        return query
+    def preprocess(self, query, params):
+        return self.replace_variables(query, params)
 
     def pre_query(self):
         if self.preamble:
@@ -65,6 +67,12 @@ class SQLServer(Database):
     SET ANSI_WARNINGS ON;
     SET ANSI_NULLS ON;
     '''
+
+    def preprocess(self, query, params):
+        query = re.sub(r"USE\s+.*", "", query)
+        query = re.sub(r"\bGO\b", "", query)
+        query = self.replace_variables(query, params)
+        return query
 
     def cursor_data(self, query):
         cursor = self.db.cursor()
@@ -103,7 +111,7 @@ class Snowflake(Database):
             finally:
                 q.close()
 
-    def preprocess(self, query):
+    def preprocess(self, query, params):
         #
         # Find any instance of a USE DATABASE etc. command
         # Add it to the preamble and then remove from the query
@@ -120,7 +128,7 @@ class Snowflake(Database):
         self.preamble += "\n".join(use_statements)
         query = r_use_statement.sub("", query)
 
-        query = self.replace_variables(query)
+        query = self.replace_variables(query, params)
 
         return query
 

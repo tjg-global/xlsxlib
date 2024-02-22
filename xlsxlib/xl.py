@@ -11,28 +11,6 @@ from . import connections
 
 DEFAULT_DATABASE = "SVR09/TDI"
 
-def from_code(code):
-    return " ".join(code.split("_")).title()
-
-def munge_script_for_mssql(query, params):
-    query = re.sub(r"USE\s+.*", "", query)
-    query = re.sub(r"\bGO\b", "", query)
-
-    vars = re.findall(r"%\((\w+)\)s", query)
-    values = {}
-    for index, var in enumerate(vars):
-        try:
-            values[var] = params[index]
-        except IndexError:
-            if var not in values:
-                values[var] = input("%s: " % from_code(var))
-    if values:
-        for k, v in values.items():
-            logging.info("%s => %s" % (k, v))
-        query = query % values
-
-    return query
-
 def main(script_filepath, database=None, xls_filepath=None, *params):
     if database is None:
         database = input("Database [%s]: " % DEFAULT_DATABASE) or DEFAULT_DATABASE
@@ -61,9 +39,7 @@ def main(script_filepath, database=None, xls_filepath=None, *params):
         if not database_name:
             print("Find database for mssql")
             for database_name in re.findall("USE\s+(.*)", query):
-                #~ database = (database.rstrip("/")) + "/" + database_name
                 break
-        query = munge_script_for_mssql(query, params)
     elif driver == "snowflake":
         #
         # The most common configuration for Snowflake will be the database
@@ -84,7 +60,7 @@ def main(script_filepath, database=None, xls_filepath=None, *params):
     if os.path.isfile(xls_filepath):
         os.remove(xls_filepath)
     for info in sql2xlsxlib.query2xlsx(
-        db=db, query=query, spreadsheet_filepath=xls_filepath, driver=driver
+        db=db, query=query, spreadsheet_filepath=xls_filepath, driver=driver, params=params
     ):
         logging.info(info)
 
