@@ -1,10 +1,6 @@
 import os, sys
 import re
 
-style_matcher = {
-    ("Decimal", 19, 4) : "money"
-}
-
 class Database():
 
     preamble = ""
@@ -72,6 +68,10 @@ class SQLServer(Database):
     SET ANSI_NULLS ON;
     '''
 
+    style_matcher = {
+        ("Decimal", 19, 4) : "money"
+    }
+
     def preprocess(self, query, params):
         query = re.sub(r"USE\s+.*", "", query)
         query = re.sub(r"\bGO\b", "", query)
@@ -98,7 +98,7 @@ class SQLServer(Database):
                 more_data = cursor.nextset()
 
             if more_data:
-                headers = [(d[0], style_matcher.get((d[1].__name__, d[4], d[5]))) for d in cursor.description]
+                headers = [(d[0], self.style_matcher.get((d[1].__name__, d[4], d[5]))) for d in cursor.description]
                 #
                 # Try to get a match on the data type and precision
                 #
@@ -109,6 +109,10 @@ class SQLServer(Database):
 class Snowflake(Database):
 
     preamble = ""
+
+    style_matcher = {
+        (0, 19, 4) : "money"
+    }
 
     def pre_query(self):
         if self.preamble:
@@ -158,7 +162,7 @@ class Snowflake(Database):
                 more_data = self.nextset(query_iter, cursor)
 
             if more_data:
-                headers = [(d[0], style_matcher.get((d[1].__name__, d[4], d[5]))) for d in cursor.description]
+                headers = [(d[0], self.style_matcher.get((d[1], d[4], d[5]))) for d in cursor.description]
                 #
                 # Try to get a match on the data type and precision
                 #
