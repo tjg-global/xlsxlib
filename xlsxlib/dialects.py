@@ -1,6 +1,10 @@
 import os, sys
 import re
 
+style_matcher = {
+    ("Decimal", 19, 4) : "money"
+}
+
 class Database():
 
     preamble = ""
@@ -94,7 +98,11 @@ class SQLServer(Database):
                 more_data = cursor.nextset()
 
             if more_data:
-                yield sheet_name, [d[0:2] for d in cursor.description], self.rows(cursor, 1000)
+                headers = [(d[0], style_matcher.get((d[1].__name__, d[4], d[5]))) for d in cursor.description]
+                #
+                # Try to get a match on the data type and precision
+                #
+                yield sheet_name, headers, self.rows(cursor, 1000)
                 more_data = cursor.nextset()
 
 
@@ -150,7 +158,11 @@ class Snowflake(Database):
                 more_data = self.nextset(query_iter, cursor)
 
             if more_data:
-                yield sheet_name, [d[0:2] for d in cursor.description], self.rows(cursor, 1000)
+                headers = [(d[0], style_matcher.get((d[1].__name__, d[4], d[5]))) for d in cursor.description]
+                #
+                # Try to get a match on the data type and precision
+                #
+                yield sheet_name, headers, self.rows(cursor, 1000)
                 more_data = self.nextset(query_iter, cursor)
 
 class sqlite(Database):

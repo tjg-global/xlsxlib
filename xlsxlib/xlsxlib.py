@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 import os, sys
 from datetime import datetime
 import logging
@@ -5,7 +6,12 @@ import logging
 logger = logging.getLogger(__package__)
 
 import openpyxl
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Font, PatternFill, NamedStyle
+
+money_style = NamedStyle(name="money", number_format="£0.00")
+styles = {
+    "money" : money_style
+}
 
 BOLD = Font(bold=True)
 YELLOW = PatternFill("solid", fgColor="ffffff80")
@@ -61,7 +67,9 @@ def xlsx(data_iterator, spreadsheet_filepath):
         # Write a single row containing the headers
         # Make the headers bold and freeze panes below that row
         #
+        column_styles = []
         for i, (name, type) in enumerate(headers, 1):
+            column_styles.append(styles.get(type))
             cell = ws.cell(column=i, row=1)
             cell.value = name
             cell.font = BOLD
@@ -87,12 +95,21 @@ def xlsx(data_iterator, spreadsheet_filepath):
         # changing other styles at least). Even if you use a variable width
         # font it is a decent estimation. This will not work with formulas.
         #
-        for col in ws.columns:
+        for (col, style) in zip(ws.columns, column_styles):
             max_length = 0
             column = col[0].column_letter # Get the column name
             max_length = max(len(str(cell.value)) for cell in col)
             adjusted_width = (max_length + 2) * 1.2
             ws.column_dimensions[column].width = adjusted_width
+
+            #
+            # Apply an optional style determined from the data type of
+            # the cells in the column (omitting the header cell).
+            # The immediate requirement is to format MONEY as currency
+            #
+            if style:
+                for cell in col[1:]:
+                    cell.style = style
 
         ws.auto_filter.ref = ws.dimensions
 
