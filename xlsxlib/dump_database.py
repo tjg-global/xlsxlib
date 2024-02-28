@@ -154,7 +154,7 @@ def dump_database(database_name, text, debug=False, logger=logging):
         # Write the object definition to the (if necessary) munged filename
         # in the type-specific folder
         #
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(obj)
 
 def dump_imported_database(database_name, debug=False, logger=logging):
@@ -168,7 +168,7 @@ def dump_imported_database(database_name, debug=False, logger=logging):
         os.mkdir(type_dirpath)
 
     filename = munged_name(database_name)
-    with open(os.path.join(type_dirpath, "%s.sql" % filename), "w") as f:
+    with open(os.path.join(type_dirpath, "%s.sql" % filename), "w", encoding="utf-8") as f:
         f.write(f"""create or replace database {database_name}:
 -- This is an 'Imported Database'
 -- The "GET_DDL" function has not extracted any objects within this database

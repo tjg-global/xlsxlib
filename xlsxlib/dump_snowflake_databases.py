@@ -95,7 +95,8 @@ def run(args):
                     # Ensure we're starting with an empty database folder
                     # so that removal diffs are honoured
                     #
-                    shutil.rmtree(database_name)
+                    if os.path.exists(database_name):
+                        shutil.rmtree(database_name)
                     os.mkdir(database_name)
                     os.chdir(database_name)
 
