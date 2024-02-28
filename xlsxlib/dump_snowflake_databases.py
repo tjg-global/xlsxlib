@@ -7,6 +7,7 @@ from concurrent import futures
 import csv
 import itertools
 import logging
+import shutil
 
 import snowflake.connector
 
@@ -84,17 +85,18 @@ def run(args):
         q = db.cursor()
         try:
             database_sql = "SELECT database_name, type FROM INFORMATION_SCHEMA.DATABASES WHERE database_name ILIKE %s ORDER BY database_name;"
-            if args.debug:
-                database_sql += " LIMIT 10;"
-            else:
-                database_sql += ";"
             q.execute(database_sql, [name_pattern])
             for row in q.fetchall():
                 [database_name, type] = row
                 logger.info("DATABASE: %s - %s", database_name, type)
 
                 if args.by_database:
-                    os.makedirs(database_name, exist_ok=True)
+                    #
+                    # Ensure we're starting with an empty database folder
+                    # so that removal diffs are honoured
+                    #
+                    shutil.rmtree(database_name)
+                    os.mkdir(database_name)
                     os.chdir(database_name)
 
                 if type == 'STANDARD':

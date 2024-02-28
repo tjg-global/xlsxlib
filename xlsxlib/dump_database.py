@@ -19,7 +19,8 @@ import shutil
 TYPES = {
     "database", "table", "schema", "sequence", "task", "view",
     "materialized view", "dynamic table", "stream", "pipe", "secure view",
-    "tag", "file format", "function", "procedure", "temporary table"
+    "tag", "file format", "function", "procedure", "temporary table",
+    "alert"
 }
 
 def from_filepath(filepath):
@@ -91,7 +92,7 @@ def dump_database(database_name, text, debug=False, logger=logging):
     #
     # Replace windows-style CR/LF line feeds with unix-style LF only
     #
-    text = text.replace("\r", "")
+    text = text.replace("\r", "") + "\n"
 
     #
     # Break the main DDL out into its component objects, each one starting
@@ -99,8 +100,12 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # FIXME: this won't actually work successfully for, eg, functions & procedures
     # which can have embedded semicolons. But it'll do for now
     #
-    r1 = re.compile(r"create or replace[^;]*;", flags=re.DOTALL|re.IGNORECASE)
-    for obj in r1.findall(text):
+    r_creates = re.compile(r"create or replace", flags=re.IGNORECASE)
+    positions = [i.span() for i in r_creates.finditer(text)]
+    spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
+
+    objects = [text[i:j] for (i, j) in spans]
+    for obj in objects:
         #
         # Extract the object type & name from the object definition
         # and use these to determine the folder and file name to use.
