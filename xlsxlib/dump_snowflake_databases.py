@@ -61,6 +61,8 @@ def run(args):
     if not args.name_pattern:
         dump_database.remove_existing_files(logger=logger)
 
+    cwd = os.getcwd()
+
     snowflake_info = SnowflakeInfo(
         args.snowflake_user or os.environ['DBT_PROFILES_USER'],
         args.snowflake_password or os.environ['DBT_PROFILES_PASSWORD'],
@@ -90,10 +92,17 @@ def run(args):
             for row in q.fetchall():
                 [database_name, type] = row
                 logger.info("DATABASE: %s - %s", database_name, type)
+
+                if args.by_database:
+                    os.makedirs(database_name, exist_ok=True)
+                    os.chdir(database_name)
+
                 if type == 'STANDARD':
                     dump_normal_databases(database_name, args, q)
                 else:
                     dump_imported_databases(database_name)
+
+                os.chdir(cwd)
         finally:
             q.close()
     finally:
@@ -107,9 +116,10 @@ def command_line():
     parser.add_argument("--snowflake_account", help="Snowflake account")
     parser.add_argument("--snowflake_warehouse", help="Snowflake warehouse")
     parser.add_argument("--snowflake_role", help="Snowflake role")
+    parser.add_argument("--by-database", help="Create a folder per database", action='store_true')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--no-debug', dest='debug', action='store_false')
-    parser.set_defaults(debug=False)
+    parser.set_defaults(debug=False, by_database=False)
     args = parser.parse_args()
     run(args)
 
