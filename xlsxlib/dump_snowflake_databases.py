@@ -47,7 +47,7 @@ def dump_normal_databases(database_name, args, q):
     q.execute("SELECT GET_DDL('database', %s, true);", [database_name])
     [ddl] = q.fetchone()
     if args.debug:
-        with open("%s.sql" % database_name, "w") as f:
+        with open("%s.sql" % database_name, "w", encoding="utf-8") as f:
             f.write(ddl)
     dump_database.dump_database(database_name, ddl, args.debug, logger=logger)
 
