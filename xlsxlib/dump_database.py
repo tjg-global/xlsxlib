@@ -20,7 +20,7 @@ TYPES = {
     "database", "table", "schema", "sequence", "task", "view",
     "materialized view", "dynamic table", "stream", "pipe", "secure view",
     "tag", "file format", "function", "procedure", "temporary table",
-    "alert", "iceberg table", "streamlit"
+    "alert", "iceberg table", "streamlit", "event table"
 }
 
 def from_filepath(filepath):
