@@ -16,6 +16,8 @@ import logging
 import re
 import shutil
 
+import sqlglot
+
 TYPES = {
     "database", "table", "schema", "sequence", "task", "view",
     "materialized view", "dynamic table", "stream", "pipe", "secure view",
@@ -99,24 +101,38 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # Break the main DDL out into its component objects, each one starting
     # with "CREATE OR REPLACE" and ending with a semicolon.
     # FIXME: this won't actually work successfully for, eg, functions & procedures
-    # which can have embedded semicolons. But it'll do for now
+    # which can have embedded semicolons. But it'll do for now.
     #
-    r_creates = re.compile(r"create or replace", flags=re.IGNORECASE)
-    positions = [i.span() for i in r_creates.finditer(text)]
-    spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
+    # We're using sqlglot to break out into individual portions. It doesn't recognise
+    # all Snowflake objects (eg FILE FORMAT or ICEBERG TABLE) but it does correctly
+    # parse the stored procedures & UDFs with their embedded SQL
+    #
+    #~ r_creates = re.compile(r"create or replace", flags=re.IGNORECASE)
+    #~ positions = [i.span() for i in r_creates.finditer(text)]
+    #~ spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
+    #~ objects = [text[i:j] for (i, j) in spans]
+    with open("c:/temp/%s.sql" % database_name, "w") as f:
+        f.write(text)
+    objects = sqlglot.parse(text)
+    for sqlglot_obj in objects:
+        obj = sqlglot_obj.sql(pretty=True, dialect="snowflake").replace("\\n", "\n")
+        if getattr(sqlglot_obj, "kind", "").upper() in ("PROCEDURE", "FUNCTION"):
+            type = sqlglot_obj.kind
+            procedure_name = sqlglot_obj.find(sqlglot.exp.Dot).name
+            param_names = [p.name for p in sqlglot_obj.find_all(sqlglot.exp.ColumnDef)]
+            name = "%s(%s)" % (procedure_name, ", ".join(param_names))
+        else:
+            #
+            # Extract the object type & name from the object definition
+            # and use these to determine the folder and file name to use.
+            #
+            matched = R_PREAMBLE.match(obj)
+            if not matched:
+                logger.error("Unable to match type, name from:\n%s", obj)
+                continue
 
-    objects = [text[i:j] for (i, j) in spans]
-    for obj in objects:
-        #
-        # Extract the object type & name from the object definition
-        # and use these to determine the folder and file name to use.
-        #
-        matched = R_PREAMBLE.match(obj)
-        if not matched:
-            logger.error("Unable to match type, name from:\n%s", obj)
-            continue
+            type, name = matched.groups()
 
-        type, name = matched.groups()
         type = type.lower()
         #
         # Strip off any leading/trailing double-quotes
