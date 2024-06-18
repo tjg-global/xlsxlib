@@ -10,9 +10,11 @@ This can be run in two ways: from a text file containing the results of a GET_DD
 command; or from the text of the GET_DDL command directly.
 """
 import os, sys
+from collections import Counter
 import glob
 import itertools
 import logging
+logger = logging.getLogger("dump_database")
 import re
 import shutil
 
@@ -25,20 +27,24 @@ TYPES = {
     "alert", "iceberg table", "streamlit", "event table"
 }
 
+logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler())
+
 def from_filepath(filepath):
     """Assume the database name from the file and extract the text
     """
     database_name, _ = os.path.splitext(os.path.basename(filepath))
     with open(filepath) as f:
         text = f.read()
-    dump_database(database_name, text)
+    count_database(database_name, text)
+    #~ dump_database(database_name, text)
 
 def munged_name(name):
     """Remove characters from a database object name which aren't valid on the filesystem
     """
-    return re.sub(r"[ ,<>\"]", "_", name)
+    return re.sub(r"[ <>\"]", "_", name)
 
-def remove_existing_files(database_name=None, logger=logging):
+def remove_existing_files(database_name=None, logger=logger):
     """Remove the files for one or all databases
 
     The code is maintaining a git-ready copy of the database structures so that
@@ -71,14 +77,29 @@ def remove_existing_files(database_name=None, logger=logging):
         #
         logger.info("Removing files for all databases")
         for dirpath in os.listdir("."):
+            if dirpath.startswith("."):
+                continue
             if os.path.isdir(dirpath):
                 shutil.rmtree(dirpath)
+
+def count_database(database_name, text, debug=False, logger=logger):
+    text = text.replace("\r", "") + "\n"
+    with open("c:/temp/%s.sql" % database_name, "w", encoding="utf-8") as f:
+        f.write(text)
+    try:
+        objects = sqlglot.parse(text)
+    except:
+        logger.exception("Unable to parse")
+        return
+
+    counts = Counter(getattr(i, "kind", "unknown") for i in objects)
+    logger.info(counts)
 
 R_PREAMBLE = re.compile(
     r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
     flags=re.IGNORECASE
 )
-def dump_database(database_name, text, debug=False, logger=logging):
+def dump_database(database_name, text, debug=False, logger=logger):
     """Take the text of a database GET_DDL and split into component objects
 
     NB initially the approach was to create a folder for each database and, within
@@ -107,20 +128,24 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # all Snowflake objects (eg FILE FORMAT or ICEBERG TABLE) but it does correctly
     # parse the stored procedures & UDFs with their embedded SQL
     #
-    #~ r_creates = re.compile(r"create or replace", flags=re.IGNORECASE)
-    #~ positions = [i.span() for i in r_creates.finditer(text)]
-    #~ spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
-    #~ objects = [text[i:j] for (i, j) in spans]
     with open("c:/temp/%s.sql" % database_name, "w") as f:
         f.write(text)
     objects = sqlglot.parse(text)
+
     for sqlglot_obj in objects:
         obj = sqlglot_obj.sql(pretty=True, dialect="snowflake").replace("\\n", "\n")
         if getattr(sqlglot_obj, "kind", "").upper() in ("PROCEDURE", "FUNCTION"):
+            #
+            # Procedures & Functions can be overloaded: ie the same procedure
+            # name can give rise to a number of definitions, each with a different
+            # combination of datatypes.
+            #
             type = sqlglot_obj.kind
             procedure_name = sqlglot_obj.find(sqlglot.exp.Dot).name
-            param_names = [p.name for p in sqlglot_obj.find_all(sqlglot.exp.ColumnDef)]
-            name = "%s(%s)" % (procedure_name, ", ".join(param_names))
+            param_names = [p.kind.this.name for p in sqlglot_obj.find_all(sqlglot.exp.ColumnDef)]
+            print(type, procedure_name)
+            print("Param names:", param_names)
+            name = "%s(%s)" % (procedure_name, ",".join(param_names))
         else:
             #
             # Extract the object type & name from the object definition
@@ -153,7 +178,9 @@ def dump_database(database_name, text, debug=False, logger=logging):
         # If the db object name has characters which won't be valid on
         # a filesystem, replace them with underscores
         #
+        print("Name:", name)
         filename = munged_name(name)
+        print("Name:", filename)
         #
         # We have some databases where two versions of the same object
         # exist, differing only by case. On Windows at least, the
@@ -174,7 +201,7 @@ def dump_database(database_name, text, debug=False, logger=logging):
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(obj)
 
-def dump_imported_database(database_name, debug=False, logger=logging):
+def dump_imported_database(database_name, debug=False, logger=logger):
     """Write a placeholder for an imported database where we don't have the definitions
 
     Imported databases are links to databases in other Snowflake instances. We have

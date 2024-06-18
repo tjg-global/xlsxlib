@@ -49,7 +49,8 @@ def dump_normal_databases(database_name, args, q):
     if args.debug:
         with open("%s.sql" % database_name, "w", encoding="utf-8") as f:
             f.write(ddl)
-    dump_database.dump_database(database_name, ddl, args.debug, logger=logger)
+    #~ dump_database.dump_database(database_name, ddl, args.debug, logger=logger)
+    dump_database.count_database(database_name, ddl, args.debug, logger=logger)
 
 def dump_imported_databases(database_name):
     dump_database.dump_imported_database(database_name, logger=logger)
