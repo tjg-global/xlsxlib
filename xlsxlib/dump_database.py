@@ -72,6 +72,8 @@ def remove_existing_files(database_name=None, logger=logging):
         #
         logger.info("Removing files for all databases")
         for dirpath in os.listdir("."):
+            if dirpath.startswith("."):
+                continue
             if os.path.isdir(dirpath):
                 shutil.rmtree(dirpath)
 
@@ -114,6 +116,10 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # CREATE OR REPLACE clause. If that happens, join it up to the next one
     # and try again. NB might need to do this recursively in the worst case!
     #
+    # NB this naive check can be fooled by single quotes in words in comments,
+    # so crudely avoid this by stripping out commented sections
+    #
+    #
     objects = []
     iobjects = iter([text[i:j] for (i, j) in spans])
     while True:
@@ -121,8 +127,14 @@ def dump_database(database_name, text, debug=False, logger=logging):
             obj = next(iobjects)
         except StopIteration:
             break
-        while obj.count("'") % 2 == 1:
-            obj += next(iobjects)
+        while re.sub("--.*", "", obj).count("'") % 2 == 1:
+            logger.debug("Uneven number of quotes in:\n%s", obj)
+            try:
+                obj += next(iobjects)
+            except StopIteration:
+                logger.exception("Failed to parse")
+                logger.debug(obj)
+                return
         objects.append(obj)
 
     for obj in objects:
