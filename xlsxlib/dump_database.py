@@ -162,7 +162,6 @@ def dump_database(database_name, text, debug=False, logger=logging):
             sqlobj = sqlglot.parse_one(obj)
             procedure_name = sqlobj.find(sqlglot.exp.Dot).name
             param_names = [p.kind.this.name for p in sqlobj.find_all(sqlglot.exp.ColumnDef)]
-            print("Param Names:", param_names)
             #
             # In some outlier cases the combination of param types is so long
             # that the resulting filename is too long! So shorten the params
