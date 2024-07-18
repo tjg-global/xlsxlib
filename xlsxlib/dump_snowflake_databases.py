@@ -49,8 +49,8 @@ def dump_normal_databases(database_name, args, q):
     if args.debug:
         with open("%s.sql" % database_name, "w", encoding="utf-8") as f:
             f.write(ddl)
-    #~ dump_database.dump_database(database_name, ddl, args.debug, logger=logger)
     dump_database.count_database(database_name, ddl, args.debug, logger=logger)
+    dump_database.dump_database(database_name, ddl, args.debug, logger=logger)
 
 def dump_imported_databases(database_name):
     dump_database.dump_imported_database(database_name, logger=logger)
@@ -123,7 +123,8 @@ def command_line():
     parser.add_argument("--by-database", help="Create a folder per database", action='store_true')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--no-debug', dest='debug', action='store_false')
-    parser.set_defaults(debug=False, by_database=True)
+    parser.add_argument('--fail-fast', action='store_true')
+    parser.set_defaults(debug=False, by_database=True, fail_fast=False)
     args = parser.parse_args()
     run(args)
 
