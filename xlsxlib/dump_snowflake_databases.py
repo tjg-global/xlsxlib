@@ -123,7 +123,7 @@ def command_line():
     parser.add_argument("--by-database", help="Create a folder per database", action='store_true')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--no-debug', dest='debug', action='store_false')
-    parser.set_defaults(debug=False, by_database=False)
+    parser.set_defaults(debug=False, by_database=True)
     args = parser.parse_args()
     run(args)
 
