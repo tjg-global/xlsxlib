@@ -16,6 +16,9 @@ import logging
 import re
 import shutil
 
+import sqlglot
+
+
 TYPES = {
     "database", "table", "schema", "sequence", "task", "view",
     "materialized view", "dynamic table", "stream", "pipe", "secure view",
@@ -140,18 +143,23 @@ def dump_database(database_name, text, debug=False, logger=logging):
         # line as the name (including the object definition)
         #
         if type in ("function", "procedure"):
-            end_of_name = matched.end()
-            end_of_line = obj.index("\n", end_of_name)
-            definition = obj[end_of_name:end_of_line]
-            print(definition)
-        else:
-            definition = ""
+            sqlobj = sqlglot.parse_one(obj)
+            procedure_name = sqlobj.find(sqlglot.exp.Dot).name
+            param_names = [p.kind.this.name for p in sqlobj.find_all(sqlglot.exp.ColumnDef)]
+            name = "%s(%s)" % (procedure_name, ",".join(param_names))
+
+            #~ end_of_name = matched.end()
+            #~ end_of_line = obj.index("\n", end_of_name)
+            #~ definition = obj[end_of_name:end_of_line]
+            #~ print(definition)
+        #~ else:
+            #~ definition = ""
 
         #
         # Strip off any leading/trailing double-quotes
         # Any embedded ones will be picked up by the "munged_name" logic
         #
-        name += definition
+        #~ name += definition
         name = name.replace('"', '')
         #
         # The object type will determine the folder to be used. If the
