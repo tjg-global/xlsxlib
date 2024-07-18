@@ -13,6 +13,7 @@ import os, sys
 import glob
 import itertools
 import logging
+from pathlib import Path
 import re
 import shutil
 
@@ -63,14 +64,14 @@ def remove_existing_files(database_name=None, logger=logging):
 
     else:
         #
-        # Remove all directories: they'll be recreated on demand by the
+        # Remove any non-dot directories: they'll be recreated on demand by the
         # dump_database functionality below. (NB this will work whether we're
         # expecting to find type-specific folders or database-specific folders)
         #
         logger.info("Removing files for all databases")
-        for dirpath in os.listdir("."):
-            if os.path.isdir(dirpath):
-                shutil.rmtree(dirpath)
+        candidate_dirs = [f for f in Path(".").iterdir() if f.is_dir() and not f.match(".*")]
+        for dirpath in candidate_dirs:
+            shutil.rmtree(dirpath)
 
 R_PREAMBLE = re.compile(
     r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
