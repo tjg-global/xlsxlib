@@ -25,6 +25,10 @@ TYPES = {
     "tag", "file format", "function", "procedure", "temporary table",
     "alert", "iceberg table", "streamlit", "event table"
 }
+DATATYPE_SHORT_NAMES = {
+    "TIMESTAMPNTZ" : "NTZ",
+    "TIMESTAMPLTZ" : "LTZ",
+}
 
 def from_filepath(filepath):
     """Assume the database name from the file and extract the text
@@ -158,14 +162,12 @@ def dump_database(database_name, text, debug=False, logger=logging):
             sqlobj = sqlglot.parse_one(obj)
             procedure_name = sqlobj.find(sqlglot.exp.Dot).name
             param_names = [p.kind.this.name for p in sqlobj.find_all(sqlglot.exp.ColumnDef)]
-            name = "%s(%s)" % (procedure_name, ",".join(param_names))
-
-            #~ end_of_name = matched.end()
-            #~ end_of_line = obj.index("\n", end_of_name)
-            #~ definition = obj[end_of_name:end_of_line]
-            #~ print(definition)
-        #~ else:
-            #~ definition = ""
+            print("Param Names:", param_names)
+            #
+            # In some outlier cases the combination of param types is so long
+            # that the resulting filename is too long! So shorten the params
+            #
+            name = "%s(%s)" % (procedure_name, ",".join(DATATYPE_SHORT_NAMES.get(p, p[:3]) for p in param_names))
 
         #
         # Strip off any leading/trailing double-quotes
