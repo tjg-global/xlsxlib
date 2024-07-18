@@ -105,7 +105,25 @@ def dump_database(database_name, text, debug=False, logger=logging):
     positions = [i.span() for i in r_creates.finditer(text)]
     spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
 
-    objects = [text[i:j] for (i, j) in spans]
+    #
+    # If any of the apparent object definitions includes an odd number of quotes,
+    # then we've got a partial object definition which includes an internal
+    # CREATE OR REPLACE clause. If that happens, join it up to the next one
+    # and try again. NB might need to do this recursively in the worst case!
+    #
+    source_objects = [text[i:j] for (i, j) in spans]
+    objects = []
+    iobjects = iter(source_objects)
+    while True:
+        try:
+            obj = next(iobjects)
+        except StopIteration:
+            break
+        while obj.count("'") % 2 == 1:
+            print("Odd number of quotes; buddying up")
+            obj += next(iobjects)
+        objects.append(obj)
+
     for obj in objects:
         #
         # Extract the object type & name from the object definition
