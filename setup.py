@@ -8,7 +8,7 @@ setuptools.setup(
     description='SQL to Excel',
     author='Tim Golden',
     author_email='tim.golden@global.com',
-    install_requires = ['openpyxl', 'pyodbc', 'snowflake-connector-python'],
+    install_requires = ['openpyxl', 'pyodbc', 'snowflake-connector-python', 'sqlglot'],
     packages = ["xlsxlib"],
     entry_points = {
         "console_scripts" : [

@@ -34,7 +34,7 @@ def from_filepath(filepath):
 def munged_name(name):
     """Remove characters from a database object name which aren't valid on the filesystem
     """
-    return re.sub(r"[ ,<>\"]", "_", name)
+    return re.sub(r"[<>\"]", "_", name)
 
 def remove_existing_files(database_name=None, logger=logging):
     """Remove the files for one or all databases
@@ -111,16 +111,14 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # CREATE OR REPLACE clause. If that happens, join it up to the next one
     # and try again. NB might need to do this recursively in the worst case!
     #
-    source_objects = [text[i:j] for (i, j) in spans]
     objects = []
-    iobjects = iter(source_objects)
+    iobjects = iter([text[i:j] for (i, j) in spans])
     while True:
         try:
             obj = next(iobjects)
         except StopIteration:
             break
         while obj.count("'") % 2 == 1:
-            print("Odd number of quotes; buddying up")
             obj += next(iobjects)
         objects.append(obj)
 
@@ -136,10 +134,24 @@ def dump_database(database_name, text, debug=False, logger=logging):
 
         type, name = matched.groups()
         type = type.lower()
+
+        #
+        # If the type is Procedure or Function then use the remainder of the
+        # line as the name (including the object definition)
+        #
+        if type in ("function", "procedure"):
+            end_of_name = matched.end()
+            end_of_line = obj.index("\n", end_of_name)
+            definition = obj[end_of_name:end_of_line]
+            print(definition)
+        else:
+            definition = ""
+
         #
         # Strip off any leading/trailing double-quotes
         # Any embedded ones will be picked up by the "munged_name" logic
         #
+        name += definition
         name = name.replace('"', '')
         #
         # The object type will determine the folder to be used. If the
