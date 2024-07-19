@@ -94,6 +94,12 @@ def comments_removed(text):
     #
     text = re.sub(r"'-+'", "", text)
     #
+    # To assist later in matching BEGIN/END blocks, removing any begin/end
+    # which are actually text
+    #
+    text = re.sub('"BEGIN"', "", text, flags=re.IGNORECASE)
+    text = re.sub('"END"', "", text, flags=re.IGNORECASE)
+    #
     # We have at least one instance where the code includes an escaped quote
     # (ie '...\' ...') which is perfectly legit. To keep this consistent we
     # can translate that into two quotes. We also have instances of escaped
@@ -105,6 +111,12 @@ def comments_removed(text):
     # NB we have at least one view which has: WHERE ... != '---'
     #
     text = re.sub("--.*", "", text)
+    #
+    # Remove anything on a single line following a double-slash
+    # (Cover off a special-case where //N is used as a NULL substitute)
+    #
+    text = re.sub("//N", "NULL", text)
+    text = re.sub("//.*", "", text)
     #
     # Remove anything within block comment markers (/*...*/)
     #
@@ -129,7 +141,7 @@ def is_complete(text):
     text = text.lower()
     if "'" in text and text.count("'") % 2 == 1:
         return False
-    if "begin" in text and text.count("begin") != text.count("end"):
+    if "begin" in text and len(re.findall(r"\bbegin\b", text)) != len(re.findall(r"\bend\b", text)):
         return False
     return True
 
