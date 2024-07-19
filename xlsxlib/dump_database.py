@@ -81,6 +81,37 @@ def remove_existing_files(database_name=None, logger=logging):
             if os.path.isdir(dirpath):
                 shutil.rmtree(dirpath)
 
+def comments_removed(text):
+    """Take a block of SQL and remove inline (--) and block (/* */) comments
+
+    This is so that we can test for mismatched quote marks without hitting
+    "word" quotes inside comment blocks (eg doesn't; isn't)
+    """
+    #
+    # Hack to work around a specific piece of code where we compare
+    # against the string '---' (which confuses our comment/quote-count logic)
+    # cf view INTEGRATION.PROCESSED.SOCIALREPORTING_DATA
+    #
+    text = re.sub(r"'-+'", "", text)
+    #
+    # We have at least one instance where the code includes an escaped quote
+    # (ie '...\' ...') which is perfectly legit. To keep this consistent we
+    # can translate that into two quotes. We also have instances of escaped
+    # backslashes, so we get rid of those first!
+    #
+    text = text.replace("\\\\", "").replace("\\'", "''")
+    #
+    # Remove anything on a single line following a double-dash
+    # NB we have at least one view which has: WHERE ... != '---'
+    #
+    text = re.sub("--.*", "", text)
+    #
+    # Remove anything within block comment markers (/*...*/)
+    #
+    text = re.sub(r"\/\*[^*]*\*\/", "", text)
+
+    return text
+
 R_PREAMBLE = re.compile(
     r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
     flags=re.IGNORECASE
@@ -105,8 +136,17 @@ def dump_database(database_name, text, debug=False, logger=logging):
     text = text.replace("\r", "") + "\n"
 
     #
+    # We have instances where a database tag is applied by means of code like:
+    # alter database <db> set tag RD_SNOWFLAKE_USAGE.CURATED.DATABASE_PURPOSE='COD dev database';
+    #
+    # Ultimately it would be good track tickets, but for now this just complicates parsing
+    # so we pull them out
+    #
+    text = re.sub(r"alter database \w+ set tag.*;", "", text)
+
+    #
     # Break the main DDL out into its component objects, each one starting
-    # with "CREATE OR REPLACE" and ending with a semicolon.
+    # with "CREATE OR REPLACE".
     # FIXME: this won't actually work successfully for, eg, functions & procedures
     # which can have embedded semicolons. But it'll do for now
     #
@@ -131,7 +171,16 @@ def dump_database(database_name, text, debug=False, logger=logging):
             obj = next(iobjects)
         except StopIteration:
             break
-        while re.sub("--.*", "", obj).count("'") % 2 == 1:
+        while comments_removed(obj).count("'") % 2 == 1:
+            #
+            # Hacky McHackFace: it seems that the generated SQL for (at least one)
+            # Streamlit object is missing an end-quote! For now, detect that it's
+            # a streamlit object and let it through
+            #
+            if "create or replace streamlit" in obj.lower():
+                logger.warn("Streamlit object; ignoring unbalanced quotes")
+                break
+
             logger.debug("Uneven number of quotes in:\n%s", obj)
             try:
                 obj += next(iobjects)
