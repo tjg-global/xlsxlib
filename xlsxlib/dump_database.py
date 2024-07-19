@@ -112,6 +112,27 @@ def comments_removed(text):
 
     return text
 
+def is_complete(text):
+    """This is a crude way of determining if we have the whole of a DDL
+    statement, since we're moving from one "CREATE OR REPLACE" to the next.
+    If a procedure or task contains a "CREATE OR REPLACE TABLE" then we need to get
+    to the end of the procedure.
+
+    The most common Function/Procedure delimeter is a single quote. But Tasks, at least,
+    can be delimited by BEGIN/END. Of course both of those can also occur
+    internally to the Task/Procedure. To check that we've got an entire statement,
+    we check both that we have an even number of quotes, and a matching number of
+    BEGIN / END pairs.
+
+    NB this could still be fooled, but it'll do for now
+    """
+    text = text.lower()
+    if "'" in text and text.count("'") % 2 == 1:
+        return False
+    if "begin" in text and text.count("begin") != text.count("end"):
+        return False
+    return True
+
 R_PREAMBLE = re.compile(
     r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
     flags=re.IGNORECASE
@@ -171,7 +192,7 @@ def dump_database(database_name, text, debug=False, logger=logging):
             obj = next(iobjects)
         except StopIteration:
             break
-        while comments_removed(obj).count("'") % 2 == 1:
+        while not is_complete(comments_removed(obj)):
             #
             # Hacky McHackFace: it seems that the generated SQL for (at least one)
             # Streamlit object is missing an end-quote! For now, detect that it's
@@ -181,7 +202,7 @@ def dump_database(database_name, text, debug=False, logger=logging):
                 logger.warn("Streamlit object; ignoring unbalanced quotes")
                 break
 
-            logger.debug("Uneven number of quotes in:\n%s", obj)
+            logger.debug("Incomplete object:\n%s", obj)
             try:
                 obj += next(iobjects)
             except StopIteration:
