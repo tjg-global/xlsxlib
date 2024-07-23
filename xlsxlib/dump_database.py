@@ -18,7 +18,6 @@ import shutil
 
 import sqlglot
 
-
 TYPES = {
     "database" : "non-programmatic",
     "schema" : "non-programmatic",
@@ -165,7 +164,7 @@ def schema_objects(schema_sql, logger):
     # as tables & views) before programmatic ones (such as procedures & tasks)
     # If we see any create statements for non-programmatic objects after we've
     # started processing programmatic ones, then they're internal to a programmatic
-    # object and can be skipped
+    # object and their definition can be appended to the end of the previous object
     #
     objects = []
     seen_programmatic = False
@@ -176,10 +175,9 @@ def schema_objects(schema_sql, logger):
             break
         type, name = R_PREAMBLE.match(candidate).groups()
         is_programmatic = TYPES[type.lower()] == "programmatic"
-        logger.debug("*** %s %s", "PROGRAMMATIC" if is_programmatic else "NON-PROGRAMMATIC", candidate)
 
         #
-        # If we're seeing a non-programmtic object (eg a table) _after_ we've
+        # If we're seeing a non-programmatic object (eg a table) _after_ we've
         # seen at least one programmatic object (eg a task) then we assume that
         # this is an internal object and we add the DDL to the end of the previous
         # chunk
@@ -235,10 +233,8 @@ def schema_objects(schema_sql, logger):
 def dump_database(database_name, text, debug=False, logger=logging):
     """Take the text of a database GET_DDL and split into component objects
 
-    NB initially the approach was to create a folder for each database and, within
-    that, one folder for each type. This was changed to have just a single set of
-    type folders, but the database name has been retained in case it's useful to
-    return to that approach
+    NB at this point our cwd is the database-specific folder so all dir/filenames
+    are relative to that.
     """
     #
     # Remove any existing object definitions for this database
@@ -261,12 +257,15 @@ def dump_database(database_name, text, debug=False, logger=logging):
     text = re.sub(r"alter database \w+ set tag.*;", "", text)
 
     #
-    # First line is always the "create database" statement
+    # Write the database definition based on the first line of the DDL
     #
     database_line = text.splitlines()[0]
     type, name = R_PREAMBLE.match(database_line).groups()
     write_object(type, name, database_line, logger)
 
+    #
+    # Chunk up each schema in the DDL and write its objects out
+    #
     for schema in chunks_from_pattern("create or replace( transient)? schema", text):
         for type, name, obj in schema_objects(schema, logger):
             write_object(type, name, obj, logger)

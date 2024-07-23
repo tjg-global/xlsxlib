@@ -3,9 +3,7 @@
 import os, sys
 import argparse
 import collections
-from concurrent import futures
 import csv
-import itertools
 import logging
 import shutil
 
@@ -98,6 +96,10 @@ def run(args):
                     if os.path.exists(database_name):
                         shutil.rmtree(database_name)
                     os.mkdir(database_name)
+                    #
+                    # Switch to the created database folder so the code in
+                    # `dump_..._database` can write its own folder
+                    #
                     os.chdir(database_name)
 
                 if type == 'STANDARD':
