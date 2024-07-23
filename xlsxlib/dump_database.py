@@ -105,7 +105,9 @@ def chunks_from_pattern(pattern, text):
     """
     r = re.compile(pattern, flags=re.IGNORECASE)
     positions = [i.span() for i in r.finditer(text)]
+    print("Positions:", positions)
     spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
+    print("Spans:", spans)
     for i, j in spans:
         yield text[i:j]
 
@@ -286,11 +288,8 @@ def dump_database(database_name, text, debug=False, logger=logging):
     #
     text = re.sub(r"alter database \w+ set tag.*;", "", text)
 
-    r_schemas = re.compile(r"create or replace schema", flags=re.IGNORECASE)
-    schema_positions = [i.span() for i in r_schemas.finditer(text)]
-    schema_spans = [(p[0], q[0]) for (p, q) in zip(schema_positions, schema_positions[1:])] + [(schema_positions[-1][0], len(text))]
-    for (i, j) in schema_spans:
-        dump_schema(text[i:j], logger)
+    for schema in chunks_from_pattern("create or replace (transient)? schema", text):
+        dump_schema(schema, logger)
 
 def dump_imported_database(database_name, debug=False, logger=logging):
     """Write a placeholder for an imported database where we don't have the definitions
