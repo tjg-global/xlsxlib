@@ -1,5 +1,5 @@
 """Take a Snowflake GET_DDL dump of a database and split into its component objects
-
+fr
 If you run GET_DDL on a Snowflake database it will return a series of object DDL
 leading with CREATE OR REPLACE [TRANSIENT] <object type> <object name>.
 
@@ -20,10 +20,27 @@ import sqlglot
 
 
 TYPES = {
-    "database", "table", "schema", "sequence", "task", "view",
-    "materialized view", "dynamic table", "stream", "pipe", "secure view",
-    "tag", "file format", "function", "procedure", "temporary table",
-    "alert", "iceberg table", "streamlit", "event table"
+    "database" : "non-programmatic",
+    "schema" : "non-programmatic",
+    "table" : "non-programmatic",
+    "temporary table" : "non-programmatic",
+    "dynamic table" : "non-programmatic",
+    "iceberg table" : "non-programmatic",
+    "event table" : "non-programmatic",
+    "view" : "non-programmatic",
+    "materialized view" : "non-programmatic",
+    "secure view" : "non-programmatic",
+    "sequence" : "non-programmatic",
+
+    "task" : "programmatic",
+    "stream" : "programmatic",
+    "pipe" : "programmatic",
+    "tag" : "programmatic",
+    "file format" : "programmatic",
+    "function" : "programmatic",
+    "procedure" : "programmatic",
+    "alert" : "programmatic",
+    "streamlit" : "programmatic"
 }
 DATATYPE_SHORT_NAMES = {
     "TIMESTAMPNTZ" : "NTZ",
@@ -81,6 +98,17 @@ def remove_existing_files(database_name=None, logger=logging):
             if os.path.isdir(dirpath):
                 shutil.rmtree(dirpath)
 
+def chunks_from_pattern(pattern, text):
+    """Use pattern as a delimiter within text
+
+    Return an iterable of each chunk of `text` which starts with `pattern`
+    """
+    r = re.compile(pattern, flags=re.IGNORECASE)
+    positions = [i.span() for i in r.finditer(text)]
+    spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
+    for i, j in spans:
+        yield text[i:j]
+
 def comments_removed(text):
     """Take a block of SQL and remove inline (--) and block (/* */) comments
 
@@ -116,79 +144,52 @@ R_PREAMBLE = re.compile(
     r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
     flags=re.IGNORECASE
 )
-def dump_database(database_name, text, debug=False, logger=logging):
-    """Take the text of a database GET_DDL and split into component objects
+R_OBJECTS = re.compile(r"create or replace", flags=re.IGNORECASE)
+def dump_schema(schema_sql, logger):
+    """Take apart one schema from the generated DDL
 
-    NB initially the approach was to create a folder for each database and, within
-    that, one folder for each type. This was changed to have just a single set of
-    type folders, but the database name has been retained in case it's useful to
-    return to that approach
+    This is useful because the objects are ordered consistently with a schema:
+    tables, views, procedures, tasks etc.
+
+    Therefore any "CREATE TABLE" markers after we've started processing procedures
+    are clearly internal DDL and can be ignored
     """
-    #
-    # Remove any existing object definitions for this database
-    # from each type folder
-    #
-    remove_existing_files(database_name, logger)
+    candidates = chunks_from_pattern("create or replace", schema_sql)
 
     #
-    # Replace windows-style CR/LF line feeds with unix-style LF only
-    #
-    text = text.replace("\r", "") + "\n"
-
-    #
-    # We have instances where a database tag is applied by means of code like:
-    # alter database <db> set tag RD_SNOWFLAKE_USAGE.CURATED.DATABASE_PURPOSE='COD dev database';
-    #
-    # Ultimately it would be good track tickets, but for now this just complicates parsing
-    # so we pull them out
-    #
-    text = re.sub(r"alter database \w+ set tag.*;", "", text)
-
-    #
-    # Break the main DDL out into its component objects, each one starting
-    # with "CREATE OR REPLACE".
-    # FIXME: this won't actually work successfully for, eg, functions & procedures
-    # which can have embedded semicolons. But it'll do for now
-    #
-    r_creates = re.compile(r"create or replace", flags=re.IGNORECASE)
-    positions = [i.span() for i in r_creates.finditer(text)]
-    spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
-
-    #
-    # If any of the apparent object definitions includes an odd number of quotes,
-    # then we've got a partial object definition which includes an internal
-    # CREATE OR REPLACE clause. If that happens, join it up to the next one
-    # and try again. NB might need to do this recursively in the worst case!
-    #
-    # NB this naive check can be fooled by single quotes in words in comments,
-    # so crudely avoid this by stripping out commented sections
-    #
+    # Objects appear in the DDL in a certain order: non-programmatic objects (such
+    # as tables & views) before programmatic ones (such as procedures & tasks)
+    # If we see any create statements for non-programmatic objects after we've
+    # started processing programmatic ones, then they're internal to a programmatic
+    # object and can be skipped
     #
     objects = []
-    iobjects = iter([text[i:j] for (i, j) in spans])
+    seen_programmatic = False
     while True:
         try:
-            obj = next(iobjects)
+            candidate = next(candidates)
         except StopIteration:
             break
-        while comments_removed(obj).count("'") % 2 == 1:
-            #
-            # Hacky McHackFace: it seems that the generated SQL for (at least one)
-            # Streamlit object is missing an end-quote! For now, detect that it's
-            # a streamlit object and let it through
-            #
-            if "create or replace streamlit" in obj.lower():
-                logger.warn("Streamlit object; ignoring unbalanced quotes")
-                break
+        type, name = R_PREAMBLE.match(candidate).groups()
+        is_programmatic = TYPES[type.lower()] == "programmatic"
+        logger.debug("*** %s %s", "PROGRAMMATIC" if is_programmatic else "NON-PROGRAMMATIC", candidate)
 
-            logger.debug("Uneven number of quotes in:\n%s", obj)
-            try:
-                obj += next(iobjects)
-            except StopIteration:
-                logger.exception("Failed to parse")
-                logger.debug(obj)
-                return
-        objects.append(obj)
+        #
+        # If we're seeing a non-programmtic object (eg a table) _after_ we've
+        # seen at least one programmatic object (eg a task) then we assume that
+        # this is an internal object.
+        #
+        if seen_programmatic and not is_programmatic:
+            logger.warn("Object %s of type %s appears after we've seen programmatic objects; assuming internal", name, type)
+            objects[-1] += candidate
+        else:
+            objects.append(candidate)
+
+        #
+        # Track when we've started to see programmatic objects
+        #
+        if not seen_programmatic and is_programmatic:
+            seen_programmatic = True
 
     for obj in objects:
         #
@@ -221,7 +222,6 @@ def dump_database(database_name, text, debug=False, logger=logging):
         # Strip off any leading/trailing double-quotes
         # Any embedded ones will be picked up by the "munged_name" logic
         #
-        #~ name += definition
         name = name.replace('"', '')
         #
         # The object type will determine the folder to be used. If the
@@ -257,6 +257,40 @@ def dump_database(database_name, text, debug=False, logger=logging):
         #
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(obj)
+
+def dump_database(database_name, text, debug=False, logger=logging):
+    """Take the text of a database GET_DDL and split into component objects
+
+    NB initially the approach was to create a folder for each database and, within
+    that, one folder for each type. This was changed to have just a single set of
+    type folders, but the database name has been retained in case it's useful to
+    return to that approach
+    """
+    #
+    # Remove any existing object definitions for this database
+    # from each type folder
+    #
+    remove_existing_files(database_name, logger)
+
+    #
+    # Replace windows-style CR/LF line feeds with unix-style LF only
+    #
+    text = text.replace("\r", "") + "\n"
+
+    #
+    # We have instances where a database tag is applied by means of code like:
+    # alter database <db> set tag RD_SNOWFLAKE_USAGE.CURATED.DATABASE_PURPOSE='COD dev database';
+    #
+    # Ultimately it would be good track tickets, but for now this just complicates parsing
+    # so we pull them out
+    #
+    text = re.sub(r"alter database \w+ set tag.*;", "", text)
+
+    r_schemas = re.compile(r"create or replace schema", flags=re.IGNORECASE)
+    schema_positions = [i.span() for i in r_schemas.finditer(text)]
+    schema_spans = [(p[0], q[0]) for (p, q) in zip(schema_positions, schema_positions[1:])] + [(schema_positions[-1][0], len(text))]
+    for (i, j) in schema_spans:
+        dump_schema(text[i:j], logger)
 
 def dump_imported_database(database_name, debug=False, logger=logging):
     """Write a placeholder for an imported database where we don't have the definitions
