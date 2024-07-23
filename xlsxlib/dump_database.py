@@ -105,56 +105,20 @@ def chunks_from_pattern(pattern, text):
     """
     r = re.compile(pattern, flags=re.IGNORECASE)
     positions = [i.span() for i in r.finditer(text)]
-    print("Positions:", positions)
     spans = [(p[0], q[0]) for (p, q) in zip(positions, positions[1:])] + [(positions[-1][0], len(text))]
-    print("Spans:", spans)
     for i, j in spans:
         yield text[i:j]
 
-def comments_removed(text):
-    """Take a block of SQL and remove inline (--) and block (/* */) comments
-
-    This is so that we can test for mismatched quote marks without hitting
-    "word" quotes inside comment blocks (eg doesn't; isn't)
-    """
-    #
-    # Hack to work around a specific piece of code where we compare
-    # against the string '---' (which confuses our comment/quote-count logic)
-    # cf view INTEGRATION.PROCESSED.SOCIALREPORTING_DATA
-    #
-    text = re.sub(r"'-+'", "", text)
-    #
-    # We have at least one instance where the code includes an escaped quote
-    # (ie '...\' ...') which is perfectly legit. To keep this consistent we
-    # can translate that into two quotes. We also have instances of escaped
-    # backslashes, so we get rid of those first!
-    #
-    text = text.replace("\\\\", "").replace("\\'", "''")
-    #
-    # Remove anything on a single line following a double-dash
-    # NB we have at least one view which has: WHERE ... != '---'
-    #
-    text = re.sub("--.*", "", text)
-    #
-    # Remove anything within block comment markers (/*...*/)
-    #
-    text = re.sub(r"\/\*[^*]*\*\/", "", text)
-
-    return text
-
 R_PREAMBLE = re.compile(
-    r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
+    r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([ 0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
     flags=re.IGNORECASE
 )
-R_OBJECTS = re.compile(r"create or replace", flags=re.IGNORECASE)
 def dump_schema(schema_sql, logger):
     """Take apart one schema from the generated DDL
 
     This is useful because the objects are ordered consistently with a schema:
-    tables, views, procedures, tasks etc.
-
-    Therefore any "CREATE TABLE" markers after we've started processing procedures
-    are clearly internal DDL and can be ignored
+    tables, views, procedures, tasks etc. Therefore any "CREATE TABLE" markers after
+    we've started processing procedures are clearly internal DDL and can be ignored
     """
     candidates = chunks_from_pattern("create or replace", schema_sql)
 
@@ -179,7 +143,8 @@ def dump_schema(schema_sql, logger):
         #
         # If we're seeing a non-programmtic object (eg a table) _after_ we've
         # seen at least one programmatic object (eg a task) then we assume that
-        # this is an internal object.
+        # this is an internal object and we add the DDL to the end of the previous
+        # chunk
         #
         if seen_programmatic and not is_programmatic:
             logger.warn("Object %s of type %s appears after we've seen programmatic objects; assuming internal", name, type)
@@ -193,6 +158,11 @@ def dump_schema(schema_sql, logger):
         if not seen_programmatic and is_programmatic:
             seen_programmatic = True
 
+    #
+    # At this point, objects is a list of database objects starting with a
+    # CREATE OR REPLACE ... which should not include any "internal" object
+    # creation from procedures, tasks etc.
+    #
     for obj in objects:
         #
         # Extract the object type & name from the object definition
@@ -207,8 +177,9 @@ def dump_schema(schema_sql, logger):
         type = type.lower()
 
         #
-        # If the type is Procedure or Function then use the remainder of the
-        # line as the name (including the object definition)
+        # Procedures & Functions can be overloaded in Snowflake: the same underlying
+        # name can have several instances, varying only by datatype signature. We
+        # use sqlglot's parser to pull out the parameter types
         #
         if type in ("function", "procedure"):
             sqlobj = sqlglot.parse_one(obj)
@@ -220,11 +191,6 @@ def dump_schema(schema_sql, logger):
             #
             name = "%s(%s)" % (procedure_name, ",".join(DATATYPE_SHORT_NAMES.get(p, p[:3]) for p in param_names))
 
-        #
-        # Strip off any leading/trailing double-quotes
-        # Any embedded ones will be picked up by the "munged_name" logic
-        #
-        name = name.replace('"', '')
         #
         # The object type will determine the folder to be used. If the
         # corresponding folder doesn't already exist, create it
@@ -283,12 +249,13 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # We have instances where a database tag is applied by means of code like:
     # alter database <db> set tag RD_SNOWFLAKE_USAGE.CURATED.DATABASE_PURPOSE='COD dev database';
     #
-    # Ultimately it would be good track tickets, but for now this just complicates parsing
+    # Ultimately it would be good to track tags, but for now this just complicates parsing
     # so we pull them out
     #
     text = re.sub(r"alter database \w+ set tag.*;", "", text)
-
-    for schema in chunks_from_pattern("create or replace (transient)? schema", text):
+    for database in re.findall("create or replace( transient)? database.*;"):
+        dump_schema(database, logger)
+    for schema in chunks_from_pattern("create or replace( transient)? schema", text):
         dump_schema(schema, logger)
 
 def dump_imported_database(database_name, debug=False, logger=logging):
