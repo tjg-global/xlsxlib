@@ -109,11 +109,49 @@ def chunks_from_pattern(pattern, text):
     for i, j in spans:
         yield text[i:j]
 
+def write_object(obj_type, obj_name, obj, logger=logging):
+    #
+    # The object type will determine the folder to be used. If the
+    # corresponding folder doesn't already exist, create it
+    #
+    type_dirpath = os.path.join(obj_type)
+    if not os.path.exists(type_dirpath):
+        os.mkdir(type_dirpath)
+
+    logger.debug("%s => %s", obj_type, obj_name)
+
+    #
+    # If the db object name has characters which won't be valid on
+    # a filesystem, replace them with underscores
+    #
+    filename = munged_name(obj_name)
+    #
+    # We have some databases where two versions of the same object
+    # exist, differing only by case. On Windows at least, the
+    # filesystem won't recognise them as different, so artifically
+    # add a suffix as needed
+    #
+    while True:
+        filepath = os.path.join(type_dirpath, "%s.sql" % filename)
+        if not os.path.exists(filepath):
+            break
+        logger.warn("%s already exists; adding suffix", filename)
+        filename += "_"
+
+    #
+    # Write the object definition to the (if necessary) munged filename
+    # in the type-specific folder
+    #
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(obj)
+
+
+
 R_PREAMBLE = re.compile(
     r'(?:create or replace)\s*(?:transient)?\s+(%s)\s+([ 0-9A-Za-z_.$\-"]+)' % "|".join(TYPES),
     flags=re.IGNORECASE
 )
-def dump_schema(schema_sql, logger):
+def schema_objects(schema_sql, logger):
     """Take apart one schema from the generated DDL
 
     This is useful because the objects are ordered consistently with a schema:
@@ -191,40 +229,8 @@ def dump_schema(schema_sql, logger):
             #
             name = "%s(%s)" % (procedure_name, ",".join(DATATYPE_SHORT_NAMES.get(p, p[:3]) for p in param_names))
 
-        #
-        # The object type will determine the folder to be used. If the
-        # corresponding folder doesn't already exist, create it
-        #
-        type_dirpath = os.path.join(type)
-        if not os.path.exists(type_dirpath):
-            os.mkdir(type_dirpath)
+        yield type, name, obj
 
-        logger.debug("%s => %s", type, name)
-
-        #
-        # If the db object name has characters which won't be valid on
-        # a filesystem, replace them with underscores
-        #
-        filename = munged_name(name)
-        #
-        # We have some databases where two versions of the same object
-        # exist, differing only by case. On Windows at least, the
-        # filesystem won't recognise them as different, so artifically
-        # add a suffix as needed
-        #
-        while True:
-            filepath = os.path.join(type_dirpath, "%s.sql" % filename)
-            if not os.path.exists(filepath):
-                break
-            logger.warn("%s already exists; adding suffix", filename)
-            filename += "_"
-
-        #
-        # Write the object definition to the (if necessary) munged filename
-        # in the type-specific folder
-        #
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(obj)
 
 def dump_database(database_name, text, debug=False, logger=logging):
     """Take the text of a database GET_DDL and split into component objects
@@ -253,10 +259,17 @@ def dump_database(database_name, text, debug=False, logger=logging):
     # so we pull them out
     #
     text = re.sub(r"alter database \w+ set tag.*;", "", text)
-    for database in re.findall("create or replace( transient)? database.*;"):
-        dump_schema(database, logger)
+
+    #
+    # First line is always the "create database" statement
+    #
+    database_line = text.splitlines()[0]
+    type, name = R_PREAMBLE.match(database_line).groups()
+    write_object(type, name, database_line, logger)
+
     for schema in chunks_from_pattern("create or replace( transient)? schema", text):
-        dump_schema(schema, logger)
+        for type, name, obj in schema_objects(schema, logger):
+            write_object(type, name, obj, logger)
 
 def dump_imported_database(database_name, debug=False, logger=logging):
     """Write a placeholder for an imported database where we don't have the definitions

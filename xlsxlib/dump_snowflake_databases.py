@@ -22,7 +22,7 @@ logger.addHandler(stdout_handler)
 
 log_file_path = "dump_snowflake_databases.log"
 log_format = "%(name)s - %(asctime)s - %(levelname)s - %(message)s"
-file_handler = logging.FileHandler(log_file_path)
+file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
 file_handler.setFormatter(logging.Formatter(log_format))
 file_handler.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
