@@ -73,8 +73,8 @@ class SQLServer(Database):
     }
 
     def preprocess(self, query, params):
-        query = re.sub(r"USE\s+.*", "", query)
-        query = re.sub(r"\bGO\b", "", query)
+        query = re.sub(r"^USE\s+.*", "", query, flags=re.MULTILINE)
+        query = re.sub(r"^GO\b", "", query, flags=re.MULTILINE)
         query = self.replace_variables(query, params)
         return query
 
