@@ -4,7 +4,7 @@ import setuptools
 
 setuptools.setup(
     name='xlsxlib',
-    version='1.20.1',
+    version='1.20.2',
     description='SQL to Excel',
     author='Tim Golden',
     author_email='tim.golden@global.com',
