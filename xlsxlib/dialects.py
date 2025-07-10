@@ -151,18 +151,18 @@ class Snowflake(Database):
         more_data = True
 
         while more_data:
-            while more_data and not cursor.rowcount:
+            while more_data and cursor.rowcount is None:
                 more_data = self.nextset(query_iter, cursor)
 
             if more_data:
                 sheet_name = cursor.fetchone()[0]
                 more_data = self.nextset(query_iter, cursor)
 
-            while more_data and not cursor.rowcount:
+            while more_data and cursor.rowcount is None:
                 more_data = self.nextset(query_iter, cursor)
 
             if more_data:
-                headers = [(d[0], self.style_matcher.get((d[1], d[4], d[5]))) for d in cursor.description]
+                headers = [(d[0].strip("'"), self.style_matcher.get((d[1], d[4], d[5]))) for d in cursor.description]
                 #
                 # Try to get a match on the data type and precision
                 #
