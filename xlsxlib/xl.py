@@ -9,7 +9,7 @@ import urllib.parse as urlparse
 from . import sql2xlsxlib
 from . import connections
 
-DEFAULT_DATABASE = "SVR09/TDI"
+DEFAULT_DATABASE = "snowflake://"
 
 def main(script_filepath, database=None, xls_filepath=None, *params):
     if database is None:
