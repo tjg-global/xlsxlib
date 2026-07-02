@@ -46,8 +46,8 @@ if snow:
     def snowflake(server=SNOWFLAKE_SERVER, database=SNOWFLAKE_WAREHOUSE, username=None, password=None, role=SNOWFLAKE_ROLE, warehouse=SNOWFLAKE_WAREHOUSE):
         return snow.connect(
             user=username or os.environ["DBT_PROFILES_USER"],
-            private_key_file=os.environ["DBT_KEY_PATH"],
-            private_key_file_pwd=os.environ["DBT_KEY_PASSPHRASE"],
+            private_key_file=os.environ["DBT_KEY_PATH"] or os.environ.get("PRIVATE_KEY_PATH"),
+            private_key_file_pwd=os.environ.get("DBT_KEY_PASSPHRASE") or os.environ.get("PRIVATE_KEY_PASSPHRASE"),
             account=server or SNOWFLAKE_SERVER,
             database=database or SNOWFLAKE_DATABASE,
             warehouse=warehouse or SNOWFLAKE_WAREHOUSE,
