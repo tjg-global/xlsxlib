@@ -20,8 +20,32 @@ def parse_dburi_ex(dburi):
         parsed.password or "",
     )
 
-def mssql(server, database, username=None, password=None, **kwargs):
-    connectors = ["Driver={ODBC Driver 17 for SQL Server}"]
+def _mssql_driver():
+    """Return (version, name) of the highest "ODBC Driver NN for SQL Server" installed."""
+    candidates = []
+    for name in pyodbc.drivers():
+        m = re.match(r"ODBC Driver (\d+) for SQL Server$", name)
+        if m:
+            candidates.append((int(m.group(1)), name))
+    if not candidates:
+        raise RuntimeError(
+            "No 'ODBC Driver NN for SQL Server' installed; found: %s" % pyodbc.drivers()
+        )
+    return max(candidates)
+
+def mssql(server, database, username=None, password=None, trust_server_certificate=None, **kwargs):
+    """Connect to SQL Server using the newest installed MS ODBC driver.
+
+    trust_server_certificate: True/False to set TrustServerCertificate explicitly.
+    None (default) turns it on for Driver 18+, which encrypts by default, so that
+    servers with self-signed certificates keep working as they did under Driver 17.
+    """
+    version, driver = _mssql_driver()
+    connectors = ["Driver={%s}" % driver]
+    if trust_server_certificate is None:
+        trust_server_certificate = version >= 18
+    if trust_server_certificate:
+        connectors.append("TrustServerCertificate=yes")
     connectors.append("Server=%s" % server)
     connectors.append("Database=%s" % database)
     if username:
