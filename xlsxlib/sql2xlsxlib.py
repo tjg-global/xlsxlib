@@ -58,13 +58,14 @@ def query2xlsx(db, query, spreadsheet_filepath, driver, params=()):
         yield info
 
 
-def table2xlsx(db, table, spreadsheet_filepath=None, dialect=None):
+def table2xlsx(db, table, spreadsheet_filepath=None, driver="mssql"):
     """table2xlsx - Convert the contents of a table to a spreadsheet
 
     Parameters:
         db - open MSSQL database connection
         table - name of a table or view in the database
         spreadsheet_filepath - full path to the output spreadsheet
+        driver - "mssql" (default) or "snowflake"
 
     Notes:
         The table/view will be queried using SELECT * FROM <table> and
@@ -72,28 +73,32 @@ def table2xlsx(db, table, spreadsheet_filepath=None, dialect=None):
     """
     if spreadsheet_filepath is None:
         spreadsheet_filepath = "%s.xlsx" % (table,)
-    for info in query2xlsx(db, "SELECT '%s'\nSELECT * FROM %s" % (table, table,), spreadsheet_filepath):
+    query = "SELECT '%s';\nSELECT * FROM %s;" % (table.replace("'", "''"), table)
+    for info in query2xlsx(db, query, spreadsheet_filepath, driver):
         yield info
 
 
-def sp2xlsx(db, stored_procedure, spreadsheet_filepath):
+def sp2xlsx(db, stored_procedure, spreadsheet_filepath, driver="mssql"):
     """sql2xlsx - Convert the output from a stored procedure to a spreadsheet
 
     Parameters:
         db - open MSSQL database connection
         stored_procedure - name of a stored procedure in the database
         spreadsheet_filepath - full path to the output spreadsheet
+        driver - "mssql" (default)
 
     Notes:
-        The stored procedure is expected to return a cursor. The cursor description
+        The stored procedure is run with EXEC (ie SQL Server) and its name
+        is used as the sheet name. The stored procedure is expected to return a cursor. The cursor description
         will be used as the header row of the spreadsheet and highlighted in bold.
         The whole spreadsheet will be have its column widths autofitted.
     """
-    for info in query2xlsx(db, stored_procedure, spreadsheet_filepath):
+    query = "SELECT '%s';\nEXEC %s;" % (stored_procedure.replace("'", "''"), stored_procedure)
+    for info in query2xlsx(db, query, spreadsheet_filepath, driver):
         yield info
 
 
-def script2xlsx(db, script_filepath, spreadsheet_filepath=None):
+def script2xlsx(db, script_filepath, spreadsheet_filepath=None, driver="mssql", params=()):
     """script2xlsx - Convert the output(s) from a script to a spreadsheet
 
     Parameters:
@@ -109,5 +114,7 @@ def script2xlsx(db, script_filepath, spreadsheet_filepath=None):
     if spreadsheet_filepath is None:
         base, ext = os.path.splitext(os.path.basename(script_filepath))
         spreadsheet_filepath = base + ".xlsx"
-    for info in query2xlsx(db, open(script_filepath).read(), spreadsheet_filepath):
+    with open(script_filepath) as f:
+        query = f.read()
+    for info in query2xlsx(db, query, spreadsheet_filepath, driver, params):
         yield info

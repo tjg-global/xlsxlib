@@ -17,9 +17,16 @@ BOLD = Font(bold=True)
 YELLOW = PatternFill("solid", fgColor="ffffff80")
 INVALID_CHARS = str.maketrans("", "", "".join(chr(i) for i in range(32) if i not in (9, 10, 13)))
 
+INVALID_SHEET_NAME_CHARS = str.maketrans("[]:*?/\\", "_______")
+
 def mangle_sheet_name(sheet_name):
-    "Sheet names cannot be longer than 31 chars"
-    return sheet_name[:31]
+    """Make a sheet name acceptable to Excel
+
+    Sheet names cannot contain any of []:*?/\\, cannot begin or end with
+    an apostrophe, and cannot be longer than 31 chars
+    """
+    sheet_name = str(sheet_name).translate(INVALID_CHARS).translate(INVALID_SHEET_NAME_CHARS)
+    return sheet_name.strip("'")[:31].strip("'")
 
 def cells_in_range(range):
     for row in range:
@@ -52,9 +59,9 @@ def xlsx(data_iterator, spreadsheet_filepath):
         # adjusted as necessary to meet the constraints of Excel sheet names,
         # or create a default one if none is supplied.
         #
-        if sheet_name:
+        if sheet_name is not None:
             sheet_name = mangle_sheet_name(sheet_name)
-        else:
+        if not sheet_name:
             sheet_name = u"Sheet %d" % n_sheet
         print("Sheet name: %s" % sheet_name)
         ws = wb.create_sheet(title=sheet_name)
