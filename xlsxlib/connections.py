@@ -67,11 +67,25 @@ if snow:
     SNOWFLAKE_DATABASE = "warehouses"
     SNOWFLAKE_ROLE = "view_all"
     SNOWFLAKE_WAREHOUSE = "view_xsmall"
+    def _env(*names, required=False):
+        """Return the value of the first of names that is set and non-empty.
+
+        If none is set, raise a RuntimeError naming them all when required,
+        otherwise return None.
+        """
+        for name in names:
+            value = os.environ.get(name)
+            if value:
+                return value
+        if required:
+            raise RuntimeError("Set one of these environment variables: %s" % ", ".join(names))
+        return None
+
     def snowflake(server=SNOWFLAKE_SERVER, database=SNOWFLAKE_WAREHOUSE, username=None, password=None, role=SNOWFLAKE_ROLE, warehouse=SNOWFLAKE_WAREHOUSE):
         return snow.connect(
-            user=username or os.environ["DBT_PROFILES_USER"],
-            private_key_file=os.environ["DBT_KEY_PATH"] or os.environ.get("PRIVATE_KEY_PATH"),
-            private_key_file_pwd=os.environ.get("DBT_KEY_PASSPHRASE") or os.environ.get("PRIVATE_KEY_PASSPHRASE"),
+            user=username or _env("DBT_PROFILES_USER", "SNOWFLAKE_USER", required=True),
+            private_key_file=_env("DBT_KEY_PATH", "PRIVATE_KEY_PATH", required=True),
+            private_key_file_pwd=_env("DBT_KEY_PASSPHRASE", "PRIVATE_KEY_PASSPHRASE"),
             account=server or SNOWFLAKE_SERVER,
             database=database or SNOWFLAKE_DATABASE,
             warehouse=warehouse or SNOWFLAKE_WAREHOUSE,
